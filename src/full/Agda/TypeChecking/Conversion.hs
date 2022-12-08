@@ -61,6 +61,7 @@ import qualified Agda.Utils.BoolSet as BoolSet
 import Agda.Utils.Size
 import Agda.Utils.Tuple
 import Agda.Utils.WithDefault
+import Agda.Utils.Bag (fromList)
 
 import Agda.Utils.Impossible
 
@@ -572,12 +573,14 @@ compareAtom cmp t m n =
               -- 3b. If some cubical magic kicks in, we are done.
               unlessM (compareEtaPrims f es es') $ do
 
+              unlessM (commAdd f es es') $ do
+
               -- 3c. Oh no, we actually have to work and compare the eliminations!
-               a <- computeElimHeadType f es es'
-               -- The polarity vector of projection-like functions
-               -- does not include the parameters.
-               pol <- getPolarity' cmp f
-               compareElims pol [] a (Def f []) es es'
+              a <- computeElimHeadType f es es'
+              -- The polarity vector of projection-like functions
+              -- does not include the parameters.
+              pol <- getPolarity' cmp f
+              compareElims pol [] a (Def f []) es es'
 
           -- Due to eta-expansion, these constructors are fully applied.
           (Con x ci xArgs, Con y _ yArgs)
@@ -2166,3 +2169,34 @@ bothAbsurd f f'
          Function{ funClauses = [Clause{ clauseBody = Nothing }] }) -> return True
         _ -> return False
   | otherwise = return False
+
+
+commAdd :: MonadConversion m => QName -> Elims -> Elims -> m Bool
+commAdd f es es' = do
+  plus <- primNatPlus
+
+  plus <- case plus of
+    (Def name _) -> return name
+    _ -> __IMPOSSIBLE__
+  
+  es <- normalise es
+  list <- fromMaybeM (return __IMPOSSIBLE__) $ return $ listArgs plus (Def f es)
+  bag <- return $ fromList list
+
+  es'<- normalise es'
+  list' <- fromMaybeM (return __IMPOSSIBLE__) $ return $ listArgs plus (Def f es')
+  bag' <- return $ fromList list'
+  
+  return $ bag == bag'
+  where
+    listArgs :: QName -> Term -> Maybe [Term]
+    listArgs plus (Def f es)
+      | f == plus = do
+        as <- allApplyElims es
+        case as of
+          [a, b] -> do
+            list1 <- listArgs plus (unArg a)
+            list2 <- listArgs plus (unArg b)
+            return $ concat [list1, list2]
+          _ -> Nothing
+    listArgs _ term = return [term]
