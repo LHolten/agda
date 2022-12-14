@@ -70,6 +70,7 @@ import Agda.Utils.Pretty (prettyShow)
 import Agda.Utils.Size
 import Agda.Utils.Tuple
 import qualified Agda.Utils.SmallSet as SmallSet
+import qualified Agda.Utils.Bag as Bag
 
 import Agda.Utils.Impossible
 
@@ -549,7 +550,9 @@ slowReduceTerm v = do
 --    and seems to save 2% sec on the standard library
 --      MetaV x args -> notBlocked . MetaV x <$> reduce' args
       MetaV x es -> iapp es
-      Def f es   -> flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
+      Def f es   -> do
+          v <- flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
+          traverse reducePlus v
       Con c ci es -> do
           -- Constructors can reduce' when they come from an
           -- instantiated module.
@@ -584,6 +587,42 @@ slowReduceTerm v = do
               Lit (LitNat n) -> Lit $ LitNat $ n + 1
               w              -> Con c ci [Apply $ defaultArg w]
       reduceNat v = return v
+      
+      reducePlus v@(Def f es) = do
+        mp <- getBuiltinName' builtinNatPlus
+        if Just f == mp then do
+            let margs = do
+                plus <- mp
+                listArgs plus v
+            unless (isJust margs) __IMPOSSIBLE__
+            margs <- normalise margs
+            let mterm = do
+                args <- margs
+                plus <- mp
+                buildTerm plus $ Bag.toList $ Bag.fromList args
+            case mterm of
+              Just term -> return term
+              Nothing -> __IMPOSSIBLE__
+        else return v
+      reducePlus v = return v
+
+      listArgs :: QName -> Term -> Maybe [Term]
+      listArgs plus (Def f es)
+        | f == plus = do
+          as <- allApplyElims es
+          case as of
+            [a, b] -> do
+              list1 <- listArgs plus (unArg a)
+              return $ (unArg b) : list1
+            _ -> Nothing
+      listArgs _ term = return [term]
+
+      buildTerm :: QName -> [Term] -> Maybe Term
+      buildTerm _ [] = Nothing
+      buildTerm _ [v] = Just v
+      buildTerm plus (x : xs) = do
+        lhs <- buildTerm plus xs
+        Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
