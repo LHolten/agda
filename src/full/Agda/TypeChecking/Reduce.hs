@@ -550,9 +550,7 @@ slowReduceTerm v = do
 --    and seems to save 2% sec on the standard library
 --      MetaV x args -> notBlocked . MetaV x <$> reduce' args
       MetaV x es -> iapp es
-      Def f es   -> do
-          v <- flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
-          traverse reducePlus v
+      Def f es   -> flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
       Con c ci es -> do
           -- Constructors can reduce' when they come from an
           -- instantiated module.
@@ -588,41 +586,49 @@ slowReduceTerm v = do
               w              -> Con c ci [Apply $ defaultArg w]
       reduceNat v = return v
       
-      reducePlus v@(Def f es) = do
-        mp <- getBuiltinName' builtinNatPlus
-        if Just f == mp then do
-            let margs = do
-                plus <- mp
-                listArgs plus v
-            unless (isJust margs) __IMPOSSIBLE__
-            margs <- normalise margs
-            let mterm = do
-                args <- margs
-                plus <- mp
-                buildTerm plus $ Bag.toList $ Bag.fromList args
-            case mterm of
-              Just term -> return term
-              Nothing -> __IMPOSSIBLE__
-        else return v
-      reducePlus v = return v
+      
+-- can not instantly call listArgs and normalise, because that would be recursion at the first level.
+-- thus instead we match the Def to make sure listArgs actually does something
+reducePlus :: (HasBuiltins m, MonadReduce m) => Term -> m (Maybe Term)
+reducePlus v@(Def f es) = do
+    mp <- getBuiltinName' builtinNatPlus
+    if Just f == mp then do
+        let margs = do
+            plus <- mp
+            listArgs plus v
+        unless (isJust margs) __IMPOSSIBLE__
+        margs <- normalise margs
+        let sargs = do
+            (args, t) <- margs
+            return (Bag.toList $ Bag.fromList args, t)
+        let mterm = do
+            args <- sargs
+            plus <- mp
+            return $ buildTerm plus args
+        if margs == sargs then
+            return Nothing
+        else case mterm of
+            Just term -> return $ Just term
+            Nothing -> __IMPOSSIBLE__
+    else return Nothing
+  where
+    listArgs :: QName -> Term -> Maybe ([Term], Term) 
+    listArgs plus (Def f es)
+      | f == plus = do
+        as <- allApplyElims es
+        case as of
+          [a, b] -> do
+            (list1, t) <- listArgs plus (unArg a)
+            return $ (unArg b : list1, t)
+          _ -> Nothing
+    listArgs _ term = return ([], term)
 
-      listArgs :: QName -> Term -> Maybe [Term]
-      listArgs plus (Def f es)
-        | f == plus = do
-          as <- allApplyElims es
-          case as of
-            [a, b] -> do
-              list1 <- listArgs plus (unArg a)
-              return $ (unArg b) : list1
-            _ -> Nothing
-      listArgs _ term = return [term]
-
-      buildTerm :: QName -> [Term] -> Maybe Term
-      buildTerm _ [] = Nothing
-      buildTerm _ [v] = Just v
-      buildTerm plus (x : xs) = do
-        lhs <- buildTerm plus xs
-        Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+    buildTerm :: QName -> ([Term], Term) -> Term
+    buildTerm _ ([], t) = t
+    buildTerm plus (x : xs, t) = let 
+        lhs = buildTerm plus (xs, t) in
+      Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+reducePlus v = return Nothing
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
@@ -655,7 +661,11 @@ unfoldDefinitionE ::
 unfoldDefinitionE unfoldDelayed keepGoing v f es = do
   r <- unfoldDefinitionStep unfoldDelayed v f es
   case r of
-    NoReduction v    -> return v
+    NoReduction v -> do
+      r <- reducePlus $ ignoreBlocking v
+      case r of
+        Just x -> keepGoing x
+        Nothing -> return v
     YesReduction _ v -> keepGoing v
 
 unfoldDefinition' ::
@@ -722,6 +732,7 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
         else noReduction $ notBlocked v  -- Andrea(s), 2014-12-05 OK?
 
   where
+    noReduction :: Blocked Term -> ReduceM (Reduced (Blocked Term) Term)
     noReduction    = return . NoReduction
     yesReduction s = return . YesReduction s
     reducePrimitive x v0 f es pf dontUnfold cls mcc rewr
