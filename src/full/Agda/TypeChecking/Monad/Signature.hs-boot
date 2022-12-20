@@ -35,11 +35,16 @@ class ( Functor m
   -- getConstInfo' q = Right <$> getConstInfo q
   getRewriteRulesFor :: QName -> m RewriteRules
 
+  getCommAssocFor :: QName -> m Bool
+
   default getConstInfo' :: (HasConstInfo n, MonadTrans t, m ~ t n) => QName -> m (Either SigError Definition)
   getConstInfo' = lift . getConstInfo'
 
   default getRewriteRulesFor :: (HasConstInfo n, MonadTrans t, m ~ t n) => QName -> m RewriteRules
   getRewriteRulesFor = lift . getRewriteRulesFor
+
+  default getCommAssocFor :: (HasConstInfo n, MonadTrans t, m ~ t n) => QName -> m Bool
+  getCommAssocFor = lift . getCommAssocFor
 
 instance HasConstInfo m => HasConstInfo (ReaderT r m)
 instance HasConstInfo m => HasConstInfo (StateT s m)

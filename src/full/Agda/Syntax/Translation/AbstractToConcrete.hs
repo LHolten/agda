@@ -277,6 +277,7 @@ instance MonadDebug AbsToCon where
 instance HasConstInfo AbsToCon where
   getConstInfo' a      = AbsToCon (getConstInfo' a)
   getRewriteRulesFor a = AbsToCon (getRewriteRulesFor a)
+  getCommAssocFor a    = AbsToCon (getCommAssocFor a)
 
 instance MonadAddContext AbsToCon where
   addCtx a b c = AbsToCon (addCtx a b (unAbsToCon c))

@@ -25,13 +25,16 @@ cong f refl = refl
 
 {-# REWRITE +zero +suc +assoc #-}
 
-{-# COMMASSOC #-}
-
 -- test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
 -- test = refl
 
 -- test2 : m + (n + o) ≡ (m + n) + o
 -- test2 = refl
+
+test2 : m + n ≡ n + m
+test2 = {!   !}
+
+{-# COMMASSOC #-}
 
 test3 : m + n ≡ n + m
 test3 = {!   !}
@@ -39,5 +42,5 @@ test3 = {!   !}
 test4 : 2 + o + n + m ≡ o + m + n + 2
 test4 = {!   !}
 
-test2 : zero ≡ n + 2 + (m + m) + n
-test2 = {!   !}
+test5 : zero ≡ n + 2 + (m + m) + n
+test5 = {!   !}

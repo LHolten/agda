@@ -753,6 +753,8 @@ class ( Functor m
   -- | Lookup the rewrite rules with the given head symbol.
   getRewriteRulesFor :: QName -> m RewriteRules
 
+  getCommAssocFor :: QName -> m Bool 
+
   -- Lifting HasConstInfo through monad transformers:
 
   default getConstInfo'
@@ -764,6 +766,11 @@ class ( Functor m
     :: (HasConstInfo n, MonadTrans t, m ~ t n)
     => QName -> m RewriteRules
   getRewriteRulesFor = lift . getRewriteRulesFor
+
+  default getCommAssocFor
+    :: (HasConstInfo n, MonadTrans t, m ~ t n)
+    => QName -> m Bool
+  getCommAssocFor = lift . getCommAssocFor
 
 {-# SPECIALIZE getConstInfo :: QName -> TCM Definition #-}
 
@@ -793,6 +800,14 @@ defaultGetRewriteRulesFor q = ifNotM (shouldReduceDef q) (return []) $ do
       look s = HMap.lookup q $ s ^. sigRewriteRules
   return $ mconcat $ catMaybes [look sig, look imp]
 
+defaultGetCommAssocFor :: (ReadTCState m, MonadTCEnv m) => QName -> m Bool
+defaultGetCommAssocFor q = do
+  st <- getTCState
+  let sig = st^.stSignature
+      imp = st^.stImports
+      look s = Set.member q $ s ^. sigCommAssoc
+  return $ look sig
+
 -- | Get the original name of the projection
 --   (the current one could be from a module application).
 getOriginalProjection :: HasConstInfo m => QName -> m QName
@@ -808,6 +823,7 @@ instance HasConstInfo (TCMT IO) where
       Right d -> return d
       Left (SigUnknown err) -> fail err
       Left SigAbstract      -> notInScopeError $ qnameToConcrete q
+  getCommAssocFor = defaultGetCommAssocFor
 
 defaultGetConstInfo
   :: (HasOptions m, MonadDebug m, MonadTCEnv m)

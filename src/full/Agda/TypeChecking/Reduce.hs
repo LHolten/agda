@@ -591,13 +591,16 @@ slowReduceTerm v = do
       
 -- can not instantly call listArgs and normalise, because that would be recursion at the first level.
 -- thus instead we match the Def to make sure listArgs actually does something
-reducePlus :: (HasBuiltins m, MonadReduce m) => Term -> m Term
-reducePlus v = do
+reducePlus :: Term -> ReduceM Term
+reducePlus v@(Def f es) = do
+  commAssoc <- getCommAssocFor f
+  if commAssoc then do
     plus <- fromMaybeM __IMPOSSIBLE__ $ getBuiltinName' builtinNatPlus
     args <- maybe __IMPOSSIBLE__ return $ listArgs plus v
     let sargs = Bag.toList $ Bag.fromList args
     term <- maybe __IMPOSSIBLE__ return $ buildTerm plus sargs
     return term
+  else return v
       
   where
     listArgs :: QName -> Term -> Maybe [Term]
@@ -618,6 +621,8 @@ reducePlus v = do
     buildTerm plus (x : xs) = do 
       lhs <- buildTerm plus xs
       Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+
+reducePlus v = return v
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
