@@ -572,12 +572,20 @@ compareAtom cmp t m n =
               -- 3b. If some cubical magic kicks in, we are done.
               unlessM (compareEtaPrims f es es') $ do
 
-              -- 3c. Oh no, we actually have to work and compare the eliminations!
-              a <- computeElimHeadType f es es'
-              -- The polarity vector of projection-like functions
-              -- does not include the parameters.
-              pol <- getPolarity' cmp f
-              compareElims pol [] a (Def f []) es es'
+              -- if comm/assoc we need to normalise the whole term
+              commAssoc <- getCommAssocFor f
+              if commAssoc then do
+                m <- normalise m
+                n <- normalise n
+                unless (m == n) $ typeError $ UnequalTerms CmpEq m n t
+                return ()
+              else do
+                -- 3c. Oh no, we actually have to work and compare the eliminations!
+                a <- computeElimHeadType f es es'
+                -- The polarity vector of projection-like functions
+                -- does not include the parameters.
+                pol <- getPolarity' cmp f
+                compareElims pol [] a (Def f []) es es'
 
           -- Due to eta-expansion, these constructors are fully applied.
           (Con x ci xArgs, Con y _ yArgs)

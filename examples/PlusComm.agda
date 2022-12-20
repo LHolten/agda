@@ -19,28 +19,21 @@ cong f refl = refl
 +suc {m = zero}  = refl
 +suc {m = suc m} = cong suc +suc
 
-+assoc : m + (n + o) ≡ m + n + o
-+assoc {m = zero} = refl
-+assoc {m = suc m} = cong suc (+assoc {m})
+-- +assoc : m + (n + o) ≡ m + n + o
+-- +assoc {m = zero} = refl
+-- +assoc {m = suc m} = cong suc (+assoc {m})
 
-{-# REWRITE +zero +suc +assoc #-}
-
--- test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
--- test = refl
-
--- test2 : m + (n + o) ≡ (m + n) + o
--- test2 = refl
-
-test2 : m + n ≡ n + m
-test2 = {!   !}
-
+{-# REWRITE +zero +suc #-}
 {-# COMMASSOC #-}
 
+test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
+test = refl
+
+test2 : m + (n + o) ≡ (m + n) + o
+test2 = refl
+
 test3 : m + n ≡ n + m
-test3 = {!   !}
+test3 = refl
 
 test4 : 2 + o + n + m ≡ o + m + n + 2
-test4 = {!   !}
-
-test5 : zero ≡ n + 2 + (m + m) + n
-test5 = {!   !}
+test4 = refl

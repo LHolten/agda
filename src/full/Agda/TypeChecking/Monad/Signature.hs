@@ -801,7 +801,7 @@ defaultGetRewriteRulesFor q = ifNotM (shouldReduceDef q) (return []) $ do
   return $ mconcat $ catMaybes [look sig, look imp]
 
 defaultGetCommAssocFor :: (ReadTCState m, MonadTCEnv m) => QName -> m Bool
-defaultGetCommAssocFor q = do
+defaultGetCommAssocFor q = ifNotM (shouldReduceDef q) (return False) $ do
   st <- getTCState
   let sig = st^.stSignature
       imp = st^.stImports
