@@ -37,7 +37,7 @@ test3 : m + n ≡ n + m
 test3 = {!   !}
 
 test4 : 2 + o + n + m ≡ o + m + n + 2
-test4 = refl
+test4 = {!   !}
 
 test2 : zero ≡ n + 2 + (m + m) + n
 test2 = {!   !}

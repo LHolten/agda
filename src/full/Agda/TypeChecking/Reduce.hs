@@ -71,6 +71,8 @@ import Agda.Utils.Size
 import Agda.Utils.Tuple
 import qualified Agda.Utils.SmallSet as SmallSet
 import qualified Agda.Utils.Bag as Bag
+import qualified Agda.Utils.List1 as List1
+import Agda.Utils.List1 (List1)
 
 import Agda.Utils.Impossible
 
@@ -589,46 +591,33 @@ slowReduceTerm v = do
       
 -- can not instantly call listArgs and normalise, because that would be recursion at the first level.
 -- thus instead we match the Def to make sure listArgs actually does something
-reducePlus :: (HasBuiltins m, MonadReduce m) => Term -> m (Maybe Term)
-reducePlus v@(Def f es) = do
-    mp <- getBuiltinName' builtinNatPlus
-    if Just f == mp then do
-        let margs = do
-            plus <- mp
-            listArgs plus v
-        unless (isJust margs) __IMPOSSIBLE__
-        margs <- normalise margs
-        let sargs = do
-            (args, t) <- margs
-            return (Bag.toList $ Bag.fromList args, t)
-        let mterm = do
-            args <- sargs
-            plus <- mp
-            return $ buildTerm plus args
-        if margs == sargs then
-            return Nothing
-        else case mterm of
-            Just term -> return $ Just term
-            Nothing -> __IMPOSSIBLE__
-    else return Nothing
+reducePlus :: (HasBuiltins m, MonadReduce m) => Term -> m Term
+reducePlus v = do
+    plus <- fromMaybeM __IMPOSSIBLE__ $ getBuiltinName' builtinNatPlus
+    args <- maybe __IMPOSSIBLE__ return $ listArgs plus v
+    let sargs = Bag.toList $ Bag.fromList args
+    term <- maybe __IMPOSSIBLE__ return $ buildTerm plus sargs
+    return term
+      
   where
-    listArgs :: QName -> Term -> Maybe ([Term], Term) 
+    listArgs :: QName -> Term -> Maybe [Term]
     listArgs plus (Def f es)
       | f == plus = do
         as <- allApplyElims es
         case as of
           [a, b] -> do
-            (list1, t) <- listArgs plus (unArg a)
-            return $ (unArg b : list1, t)
+            list1 <- listArgs plus (unArg a)
+            list2 <- listArgs plus (unArg b)
+            return $ concat [list1, list2]
           _ -> Nothing
-    listArgs _ term = return ([], term)
+    listArgs _ term = return [term]
 
-    buildTerm :: QName -> ([Term], Term) -> Term
-    buildTerm _ ([], t) = t
-    buildTerm plus (x : xs, t) = let 
-        lhs = buildTerm plus (xs, t) in
-      Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
-reducePlus v = return Nothing
+    buildTerm :: QName -> [Term] -> Maybe Term
+    buildTerm _ [] = Nothing
+    buildTerm _ [t] = Just t
+    buildTerm plus (x : xs) = do 
+      lhs <- buildTerm plus xs
+      Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
@@ -661,11 +650,7 @@ unfoldDefinitionE ::
 unfoldDefinitionE unfoldDelayed keepGoing v f es = do
   r <- unfoldDefinitionStep unfoldDelayed v f es
   case r of
-    NoReduction v -> do
-      r <- reducePlus $ ignoreBlocking v
-      case r of
-        Just x -> keepGoing x
-        Nothing -> return v
+    NoReduction v -> return v
     YesReduction _ v -> keepGoing v
 
 unfoldDefinition' ::
@@ -1264,18 +1249,20 @@ instance Normalise Term where
     normalise' v = ifM shouldTryFastReduce (fastNormalise v) (slowNormaliseArgs =<< reduce' v)
 
 slowNormaliseArgs :: Term -> ReduceM Term
-slowNormaliseArgs = \case
-  Var n vs    -> Var n      <$> normalise' vs
-  Con c ci vs -> Con c ci   <$> normalise' vs
-  Def f vs    -> Def f      <$> normalise' vs
-  MetaV x vs  -> MetaV x    <$> normalise' vs
-  v@(Lit _)   -> return v
-  Level l     -> levelTm    <$> normalise' l
-  Lam h b     -> Lam h      <$> normalise' b
-  Sort s      -> Sort       <$> normalise' s
-  Pi a b      -> uncurry Pi <$> normalise' (a, b)
-  v@DontCare{}-> return v
-  v@Dummy{}   -> return v
+slowNormaliseArgs t = do
+  x <- case t of
+    Var n vs    -> Var n      <$> normalise' vs
+    Con c ci vs -> Con c ci   <$> normalise' vs
+    Def f vs    -> Def f      <$> normalise' vs
+    MetaV x vs  -> MetaV x    <$> normalise' vs
+    v@(Lit _)   -> return v
+    Level l     -> levelTm    <$> normalise' l
+    Lam h b     -> Lam h      <$> normalise' b
+    Sort s      -> Sort       <$> normalise' s
+    Pi a b      -> uncurry Pi <$> normalise' (a, b)
+    v@DontCare{}-> return v
+    v@Dummy{}   -> return v
+  reducePlus x
 
 -- Note: not the default instance for Elim' since we do something special for Arg.
 instance Normalise t => Normalise (Elim' t) where
