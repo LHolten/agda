@@ -272,6 +272,10 @@ addRewriteRulesFor f rews matchables =
 
       hasProjectionPattern rew = any (isJust . isProjElim) $ rewPats rew
 
+addCommAssocFor :: QName -> Signature -> Signature
+addCommAssocFor q =
+    over sigCommAssoc (Set.insert q)
+
 setMatchableSymbols :: QName -> [QName] -> Signature -> Signature
 setMatchableSymbols f matchables =
   foldr ((.) . (\g -> updateDefinition g setMatchable)) id matchables

@@ -155,6 +155,7 @@ import Agda.Utils.Impossible
 
     'BUILTIN'                 { TokKeyword KwBUILTIN $$ }
     'CATCHALL'                { TokKeyword KwCATCHALL $$ }
+    'COMMASSOC'               { TokKeyword KwCOMMASSOC $$ }
     'DISPLAY'                 { TokKeyword KwDISPLAY $$ }
     'ETA'                     { TokKeyword KwETA $$ }
     'FOREIGN'                 { TokKeyword KwFOREIGN $$ }
@@ -284,6 +285,7 @@ Token
       -- Please keep these pragmas in alphabetical order!
     | 'BUILTIN'                 { TokKeyword KwBUILTIN $1 }
     | 'CATCHALL'                { TokKeyword KwCATCHALL $1 }
+    | 'COMMASSOC'               { TokKeyword KwCOMMASSOC $1 }
     | 'COMPILE'                 { TokKeyword KwCOMPILE $1 }
     | 'DISPLAY'                 { TokKeyword KwDISPLAY $1 }
     | 'ETA'                     { TokKeyword KwETA $1 }
@@ -1510,6 +1512,7 @@ DeclarationPragma :: { Pragma }
 DeclarationPragma
   : BuiltinPragma            { $1 }
   | RewritePragma            { $1 }
+  | CommAssocPragma          { $1 }
   | CompilePragma            { $1 }
   | ForeignPragma            { $1 }
   | StaticPragma             { $1 }
@@ -1551,6 +1554,11 @@ RewritePragma :: { Pragma }
 RewritePragma
     : '{-#' 'REWRITE' PragmaQNames '#-}'
       { RewritePragma (getRange ($1,$2,$3,$4)) (getRange $2) $3 }
+
+CommAssocPragma :: { Pragma }
+CommAssocPragma
+    : '{-#' 'COMMASSOC' '#-}'
+      { CommAssocPragma (getRange ($1,$2,$3)) }
 
 ForeignPragma :: { Pragma }
 ForeignPragma

@@ -26,7 +26,7 @@ instance EmbPrj a => EmbPrj (Dom a) where
   value = valueN Dom
 
 instance EmbPrj Signature where
-  icod_ (Sig a b c) = icodeN' Sig a b c
+  icod_ (Sig a b c d) = icodeN' Sig a b c d
 
   value = valueN Sig
 

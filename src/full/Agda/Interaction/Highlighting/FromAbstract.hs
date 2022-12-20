@@ -229,6 +229,7 @@ instance Hilite A.Pragma where
     A.BuiltinNoDefPragma b k x   -> singleAspect Keyword b <> hiliteQName (Just $ kindOfNameToNameKind k) x
     A.CompilePragma b x _foreign -> singleAspect Keyword b <> hilite x
     A.RewritePragma r xs         -> singleAspect Keyword r <> hilite xs
+    A.CommAssocPragma            -> mempty
     A.StaticPragma x             -> hilite x
     A.EtaPragma x                -> hilite x
     A.InjectivePragma x          -> hilite x

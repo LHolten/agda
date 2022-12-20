@@ -167,6 +167,9 @@ addRewriteRules qs = do
     reportSDoc "rewriting" 10 $
       "done checking confluence of rules" <+> prettyList_ (map (prettyTCM . rewName) rews)
 
+addCommAssoc :: QName -> TCM ()
+addCommAssoc q = modifySignature $ addCommAssocFor q
+
 -- Auxiliary function for checkRewriteRule.
 -- | Get domain of rewrite relation.
 rewriteRelationDom :: QName -> TCM (ListTel, Dom Type)

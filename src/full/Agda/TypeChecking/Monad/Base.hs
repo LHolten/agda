@@ -1700,6 +1700,7 @@ data Signature = Sig
       { _sigSections    :: Sections
       , _sigDefinitions :: Definitions
       , _sigRewriteRules:: RewriteRuleMap  -- ^ The rewrite rules defined in this file.
+      , _sigCommAssoc   :: CommAssocSet
       }
   deriving (Show, Generic)
 
@@ -1718,9 +1719,15 @@ sigRewriteRules f s =
   f (_sigRewriteRules s) <&>
   \x -> s {_sigRewriteRules = x}
 
+sigCommAssoc :: Lens' CommAssocSet Signature
+sigCommAssoc f s =
+  f (_sigCommAssoc s) <&>
+  \x -> s {_sigCommAssoc = x}
+
 type Sections    = Map ModuleName Section
 type Definitions = HashMap QName Definition
 type RewriteRuleMap = HashMap QName RewriteRules
+type CommAssocSet = Set QName
 type DisplayForms = HashMap QName [LocalDisplayForm]
 
 newtype Section = Section { _secTelescope :: Telescope }
@@ -1735,7 +1742,7 @@ secTelescope f s =
   \x -> s {_secTelescope = x}
 
 emptySignature :: Signature
-emptySignature = Sig Map.empty HMap.empty HMap.empty
+emptySignature = Sig Map.empty HMap.empty HMap.empty Set.empty
 
 -- | A @DisplayForm@ is in essence a rewrite rule @q ts --> dt@ for a defined symbol (could be a
 --   constructor as well) @q@. The right hand side is a 'DisplayTerm' which is used to 'reify' to a
@@ -5164,7 +5171,7 @@ getGeneralizedFieldName q
 ---------------------------------------------------------------------------
 
 instance KillRange Signature where
-  killRange (Sig secs defs rews) = killRange2 Sig secs defs rews
+  killRange (Sig secs defs rews comm) = killRange2 Sig secs defs rews comm
 
 instance KillRange Sections where
   killRange = fmap killRange

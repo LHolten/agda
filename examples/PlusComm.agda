@@ -25,6 +25,8 @@ cong f refl = refl
 
 {-# REWRITE +zero +suc +assoc #-}
 
+{-# COMMASSOC #-}
+
 -- test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
 -- test = refl
 

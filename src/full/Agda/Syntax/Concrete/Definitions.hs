@@ -1053,6 +1053,7 @@ niceDeclarations fixs ds = do
               -- The REWRITE pragma behaves differently before or after the def.
               -- and affects type checking.  Thus, we refuse it here.
               RewritePragma{}           -> invalid "REWRITE pragmas"
+              CommAssocPragma{}         -> invalid "COMMASSOC pragmas"
 
               -- Compiler pragmas are not needed for type checking, thus,
               -- can go to the bottom.

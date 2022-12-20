@@ -213,6 +213,7 @@ data Pragma
     -- ^ Builtins that do not come with a definition,
     --   but declare a name for an Agda concept.
   | RewritePragma Range [QName]
+  | CommAssocPragma
     -- ^ Range is range of REWRITE keyword.
   | CompilePragma RString QName String
   | StaticPragma QName

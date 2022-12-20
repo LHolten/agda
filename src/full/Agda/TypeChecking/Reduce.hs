@@ -1446,6 +1446,13 @@ instance InstantiateFull ConHead where
 instance InstantiateFull DBPatVar where
     instantiateFull' = return
 
+instance InstantiateFull () where
+    instantiateFull'= return
+
+instance InstantiateFull (Set.Set k) where
+    instantiateFull'= return
+
+
 -- Rest:
 
 instance InstantiateFull Sort where
@@ -1580,7 +1587,7 @@ instance InstantiateFull CompareAs where
   instantiateFull' AsTypes       = return AsTypes
 
 instance InstantiateFull Signature where
-  instantiateFull' (Sig a b c) = uncurry3 Sig <$> instantiateFull' (a, b, c)
+  instantiateFull' (Sig a b c d) = uncurry4 Sig <$> instantiateFull' (a, b, c, d)
 
 instance InstantiateFull Section where
   instantiateFull' (Section tel) = Section <$> instantiateFull' tel
@@ -1734,6 +1741,7 @@ instantiateFullExceptForDefinitions'
     <$> ((\s r -> Sig { _sigSections     = s
                       , _sigDefinitions  = sig ^. sigDefinitions
                       , _sigRewriteRules = r
+                      , _sigCommAssoc    = sig ^. sigCommAssoc
                       })
          <$> instantiateFull' (sig ^. sigSections)
          <*> instantiateFull' (sig ^. sigRewriteRules))

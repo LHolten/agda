@@ -1487,6 +1487,7 @@ instance ToAbstract Declarations where
        C.CatchallPragma{}   -> Nothing
        -- @RewritePragma@ already requires --rewriting which is incompatible with --safe
        C.RewritePragma{}    -> Nothing
+       C.CommAssocPragma{}  -> Nothing
        -- @CompilePragma@ already handled in the nicifier
        C.CompilePragma{}    -> Nothing
        C.NotProjectionLikePragma{} -> Nothing
@@ -2349,6 +2350,7 @@ instance ToAbstract C.Pragma where
       A.Con x          -> genericError $ "REWRITE used on ambiguous name " ++ prettyShow x
       A.Var x          -> genericError $ "REWRITE used on parameter " ++ prettyShow x ++ " instead of on a defined symbol"
       _       -> __IMPOSSIBLE__
+  toAbstract (C.CommAssocPragma r) = return [A.CommAssocPragma]
   toAbstract (C.ForeignPragma _ rb s) = [] <$ addForeignCode (rangedThing rb) s
   toAbstract (C.CompilePragma _ rb x s) = do
     me <- toAbstract $ MaybeOldQName $ OldQName x Nothing

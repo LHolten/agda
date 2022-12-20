@@ -101,6 +101,7 @@ tokens :-
 <pragma_>   "OPTIONS"                  { keyword KwOPTIONS }
 <pragma_>   "POLARITY"                 { keyword KwPOLARITY }
 <pragma_>   "REWRITE"                  { keyword KwREWRITE }
+<pragma_>   "COMMASSOC"                { keyword KwCOMMASSOC }
 <pragma_>   "STATIC"                   { keyword KwSTATIC }
 <pragma_>   "TERMINATING"              { keyword KwTERMINATING }
 <pragma_>   "WARNING_ON_USAGE"         { keyword KwWARNING_ON_USAGE }
