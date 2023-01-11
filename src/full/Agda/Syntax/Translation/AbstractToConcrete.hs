@@ -1291,7 +1291,7 @@ instance ToConcrete RangeAndPragma where
     A.BuiltinPragma b x       -> C.BuiltinPragma r b <$> toConcrete x
     A.BuiltinNoDefPragma b _kind x -> C.BuiltinPragma r b <$> toConcrete x
     A.RewritePragma r' x      -> C.RewritePragma r r' <$> toConcrete x
-    A.CommAssocPragma -> return $ C.CommAssocPragma r
+    A.CommAssocPragma x -> C.CommAssocPragma r <$> toConcrete x
     A.CompilePragma b x s -> do
       x <- toConcrete x
       return $ C.CompilePragma r b x s

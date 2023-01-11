@@ -1557,8 +1557,8 @@ RewritePragma
 
 CommAssocPragma :: { Pragma }
 CommAssocPragma
-    : '{-#' 'COMMASSOC' '#-}'
-      { CommAssocPragma (getRange ($1,$2,$3)) }
+    : '{-#' 'COMMASSOC' PragmaQName '#-}'
+      { CommAssocPragma (getRange ($1,$2,$3,$4)) $3 }
 
 ForeignPragma :: { Pragma }
 ForeignPragma

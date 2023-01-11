@@ -2350,7 +2350,15 @@ instance ToAbstract C.Pragma where
       A.Con x          -> genericError $ "REWRITE used on ambiguous name " ++ prettyShow x
       A.Var x          -> genericError $ "REWRITE used on parameter " ++ prettyShow x ++ " instead of on a defined symbol"
       _       -> __IMPOSSIBLE__
-  toAbstract (C.CommAssocPragma r) = return [A.CommAssocPragma]
+  toAbstract (C.CommAssocPragma r x) = singleton . A.CommAssocPragma <$> do
+    e <- toAbstract $ OldQName x Nothing
+    case e of
+      A.Def x          -> return x
+      A.Proj _ p | Just x <- getUnambiguous p -> return x
+      A.Proj _ x       -> genericError $ "COMMASSOC used on ambiguous name " ++ prettyShow x
+      A.Con c | Just x <- getUnambiguous c -> return x
+      A.Con x          -> genericError $ "COMMASSOC used on ambiguous name " ++ prettyShow x
+      _       -> __IMPOSSIBLE__
   toAbstract (C.ForeignPragma _ rb s) = [] <$ addForeignCode (rangedThing rb) s
   toAbstract (C.CompilePragma _ rb x s) = do
     me <- toAbstract $ MaybeOldQName $ OldQName x Nothing

@@ -595,10 +595,9 @@ reducePlus :: Term -> ReduceM Term
 reducePlus v@(Def f es) = do
   commAssoc <- getCommAssocFor f
   if commAssoc then do
-    plus <- fromMaybeM __IMPOSSIBLE__ $ getBuiltinName' builtinNatPlus
-    args <- maybe __IMPOSSIBLE__ return $ listArgs plus v
+    args <- maybe __IMPOSSIBLE__ return $ listArgs f v
     let sargs = Bag.toList $ Bag.fromList args
-    term <- maybe __IMPOSSIBLE__ return $ buildTerm plus sargs
+    term <- maybe __IMPOSSIBLE__ return $ buildTerm f sargs
     return term
   else return v
       

@@ -24,7 +24,7 @@ cong f refl = refl
 -- +assoc {m = suc m} = cong suc (+assoc {m})
 
 {-# REWRITE +zero +suc #-}
-{-# COMMASSOC #-}
+{-# COMMASSOC _+_ #-}
 
 test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
 test = refl
