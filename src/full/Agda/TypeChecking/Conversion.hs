@@ -577,7 +577,7 @@ compareAtom cmp t m n =
               if commAssoc then do
                 m <- normalise m
                 n <- normalise n
-                unless (m == n) $ typeError $ UnequalTerms CmpEq m n t
+                unless (m == n) $ notEqual
                 return ()
               else do
                 -- 3c. Oh no, we actually have to work and compare the eliminations!
@@ -596,9 +596,18 @@ compareAtom cmp t m n =
                     AsSizes   -> __IMPOSSIBLE__
                     AsTypes   -> __IMPOSSIBLE__
                   forcedArgs <- getForcedArgs $ conName x
-                  -- Constructors are covariant in their arguments
-                  -- (see test/succeed/CovariantConstructors).
-                  compareElims (repeat $ polFromCmp cmp) forcedArgs a' (Con x ci []) xArgs yArgs
+
+                  -- if comm/assoc we need to normalise the whole term
+                  commAssoc <- getCommAssocFor $ conName x
+                  if commAssoc then do
+                    m <- normalise m
+                    n <- normalise n
+                    unless (m == n) $ notEqual
+                    return ()
+                  else do
+                    -- Constructors are covariant in their arguments
+                    -- (see test/succeed/CovariantConstructors).
+                    compareElims (repeat $ polFromCmp cmp) forcedArgs a' (Con x ci []) xArgs yArgs
           _ -> notEqual
     where
         -- returns True in case we handled the comparison already.
