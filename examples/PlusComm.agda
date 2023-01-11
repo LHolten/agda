@@ -37,3 +37,21 @@ test3 = refl
 
 test4 : 2 + o + n + m ≡ o + m + n + 2
 test4 = refl
+
+data Bag : Set where
+    [_] : Nat → Bag
+    _++_ : Bag → Bag → Bag
+    
+infixl 20 _++_
+
+{-# COMMASSOC _++_ #-}
+
+test-comm : [ o ] ++ ([ m ] ++ [ n ]) ≡ ([ o ] ++ [ m ]) ++ [ n ]
+test-comm = refl
+
+data _∈_ : Nat → Bag → Set where
+    proof : ∀ {xs} {x} → x ∈ [ x ] ++ xs
+infix 19 _∈_
+
+test-member : ∀ {o n m} → m ∈ [ o ] ++ [ m ] ++ [ n ]
+test-member {o} {n} = proof {[ o ] ++ [ n ]}
