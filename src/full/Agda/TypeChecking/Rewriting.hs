@@ -168,7 +168,45 @@ addRewriteRules qs = do
       "done checking confluence of rules" <+> prettyList_ (map (prettyTCM . rewName) rews)
 
 addCommAssoc :: QName -> TCM ()
-addCommAssoc q = modifySignature $ addCommAssocFor q
+addCommAssoc q = do
+  def <- instantiateDef =<< getConstInfo q
+  TelV gamma1 core <- telView $ defType def
+  reportSDoc "commassoc" 10 $
+    "adding commassoc rule" <+> prettyTCM q
+  reportSDoc "commassoc" 20 $
+    "gamma is" <+> prettyTCM gamma1 <+> "core is" <+> prettyTCM core
+  case unEl core of
+    Def rel es@(_:_:_) -> do
+      reportSDoc "commassoc" 20 $
+        "rel is" <+> prettyTCM rel <+> "es is" <+> prettyTCM es
+      -- Because of the type of rel (Γ → sort), all es are applications.
+      let vs = map unArg $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
+      -- The last two arguments are lhs and rhs.
+          n  = size vs
+          (us, [lhs, rhs]) = splitAt (n - 2) vs
+          aa = Apply $ defaultArg $ Var 1 []
+          bb = Apply $ defaultArg $ Var 0 []
+      -- lets check that it is commutativity
+      ff <- case lhs of
+        Def f (a:b:[]) | a == aa && b == bb -> return f
+        _ -> typeError . GenericDocError =<< hsep
+          [ "expected"
+          , prettyTCM lhs
+          , "to be on these variables"
+          , prettyTCM aa, "and", prettyTCM bb
+          ]
+      case rhs of
+        Def f (b:a:[]) | a == aa && b == bb && f == ff -> return ()
+        _ -> typeError . GenericDocError =<< hsep
+          [ "This is not commutativity"
+          , prettyTCM lhs
+          , "<=>"
+          , prettyTCM rhs
+          ]
+
+      modifySignature $ addCommAssocFor ff
+    _ -> __IMPOSSIBLE__
+  
 
 -- Auxiliary function for checkRewriteRule.
 -- | Get domain of rewrite relation.
