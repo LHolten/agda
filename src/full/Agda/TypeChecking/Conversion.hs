@@ -597,17 +597,9 @@ compareAtom cmp t m n =
                     AsTypes   -> __IMPOSSIBLE__
                   forcedArgs <- getForcedArgs $ conName x
 
-                  -- if comm/assoc we need to normalise the whole term
-                  commAssoc <- getCommAssocFor $ conName x
-                  if commAssoc then do
-                    m <- normalise m
-                    n <- normalise n
-                    unless (m == n) $ patternViolation alwaysUnblock
-                    return ()
-                  else do
-                    -- Constructors are covariant in their arguments
-                    -- (see test/succeed/CovariantConstructors).
-                    compareElims (repeat $ polFromCmp cmp) forcedArgs a' (Con x ci []) xArgs yArgs
+                  -- Constructors are covariant in their arguments
+                  -- (see test/succeed/CovariantConstructors).
+                  compareElims (repeat $ polFromCmp cmp) forcedArgs a' (Con x ci []) xArgs yArgs
           _ -> notEqual
     where
         -- returns True in case we handled the comparison already.

@@ -621,37 +621,6 @@ reducePlus v@(Def f es) = do
       lhs <- buildTerm plus xs
       Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
-reducePlus v@(Con head info es) = do
-  commAssoc <- getCommAssocFor $ conName head
-  if commAssoc then do
-    args <- maybe __IMPOSSIBLE__ return $ listArgs head v
-    let sargs = Bag.toList $ Bag.fromList args
-    term <- maybe __IMPOSSIBLE__ return $ buildTerm head sargs
-    return term
-  else return v
-
-  where
-    listArgs :: ConHead -> Term -> Maybe [Term]
-    listArgs plus (Con head info es)
-      | head == plus = do
-        as <- allApplyElims es
-        case as of
-          [a, b] -> do
-            list1 <- listArgs plus (unArg a)
-            list2 <- listArgs plus (unArg b)
-            return $ concat [list1, list2]
-          _ -> Nothing
-    listArgs _ term = return [term]
-
-    buildTerm :: ConHead -> [Term] -> Maybe Term
-    buildTerm _ [] = Nothing
-    buildTerm _ [t] = Just t
-    buildTerm plus (x : xs) = do 
-      lhs <- buildTerm plus xs
-      Just $ Con plus ConOSystem [Apply $ defaultArg lhs, Apply $ defaultArg x]
-        
-    
-
 reducePlus v = return v
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion

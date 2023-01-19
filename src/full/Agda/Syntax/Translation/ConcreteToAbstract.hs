@@ -2354,10 +2354,8 @@ instance ToAbstract C.Pragma where
     e <- toAbstract $ OldQName x Nothing
     case e of
       A.Def x          -> return x
-      A.Proj _ p | Just x <- getUnambiguous p -> return x
-      A.Proj _ x       -> genericError $ "COMMASSOC used on ambiguous name " ++ prettyShow x
-      A.Con c | Just x <- getUnambiguous c -> return x
-      A.Con x          -> genericError $ "COMMASSOC used on ambiguous name " ++ prettyShow x
+      A.Proj _ x       -> genericError $ "COMMASSOC can not be used on Proj " ++ prettyShow x
+      A.Con x          -> genericError $ "COMMASSOC can not be used on Con " ++ prettyShow x
       _       -> __IMPOSSIBLE__
   toAbstract (C.ForeignPragma _ rb s) = [] <$ addForeignCode (rangedThing rb) s
   toAbstract (C.CompilePragma _ rb x s) = do
