@@ -50,16 +50,35 @@ suc xs ++ suc ys = suc (xs ++ ys)
 ++-assoc xs ys (zero zs) = cong zero (++-assoc xs ys zs)
 ++-assoc (suc xs) (suc ys) (suc zs) = cong suc (++-assoc xs ys zs)
 
-++-comm2 : [zero] ++ [zero] ≡ [zero] ++ [zero]
-++-comm2 = refl
-
--- {-# COMMASSOC ++-comm2 #-}
 {-# COMMASSOC ++-comm #-}
 
-bag : Nat → Bag
-bag zero = [zero]
-bag (suc x) = suc (bag x)
+infixr 21 _+<_
+_+<_ : Nat → Bag → Bag
+zero +< xs = xs
+suc x +< xs = suc (x +< xs)
 
++<-dist-++ : (x : Nat) (xs ys : Bag) → x +< (xs ++ ys) ≡ x +< xs ++ x +< ys
++<-dist-++ zero xs ys = refl
++<-dist-++ (suc x) xs ys = cong suc (+<-dist-++ x xs ys)
+-- +<-dist-++ (suc x) xs ys = +<-dist-++ x (suc xs) (suc ys)
+
++<-suc : (x : Nat) (xs : Bag) → x +< suc xs ≡ suc (x +< xs)
++<-suc zero xs = refl
++<-suc (suc x) xs = cong suc (+<-suc x xs)
+
++<-zero : (x : Nat) (xs : Bag) → x +< zero xs ≡ x +< [zero] ++ x +< xs
++<-zero zero xs = refl
++<-zero (suc x) xs = cong suc (+<-zero x xs)
+
+-- maybe this should be the other way around?
++-dist-+< : (x y : Nat) (xs : Bag) → (x + y) +< xs ≡ x +< y +< xs
++-dist-+< zero y xs = refl
++-dist-+< (suc x) y xs = cong suc (+-dist-+< x y xs)
+
+{-# REWRITE +<-dist-++ +<-suc +<-zero +-dist-+< #-}
+
+bag : Nat → Bag
+bag x = x +< [zero]
 
 test-comm : ∀ {a b : Nat} → bag a ++ bag b ≡ bag b ++ bag a
 test-comm = refl
@@ -104,4 +123,4 @@ len-dist (suc xs) (suc ys) = len-dist xs ys
 
 {-# REWRITE len-dist #-}
 
--- len-dist results in a sum which is not COMMASSOC, so it is not confluent!!
+-- len-dist results in a sum which is not COMMASSOC, so it is not confluent!! 
