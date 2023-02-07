@@ -71,56 +71,49 @@ suc x +< xs = suc (x +< xs)
 +<-zero (suc x) xs = cong suc (+<-zero x xs)
 
 -- maybe this should be the other way around?
-+-dist-+< : (x y : Nat) (xs : Bag) → (x + y) +< xs ≡ x +< y +< xs
-+-dist-+< zero y xs = refl
-+-dist-+< (suc x) y xs = cong suc (+-dist-+< x y xs)
+-- +-dist-+< : (x y : Nat) (xs : Bag) → (x + y) +< xs ≡ x +< y +< xs
+-- +-dist-+< zero y xs = refl
+-- +-dist-+< (suc x) y xs = cong suc (+-dist-+< x y xs)
++<-pack-+ : (x y : Nat) (xs : Bag) → x +< y +< xs ≡ (x + y) +< xs
++<-pack-+ zero y xs = refl
++<-pack-+ (suc x) y xs = cong suc (+<-pack-+ x y xs)
 
-{-# REWRITE +<-dist-++ +<-suc +<-zero +-dist-+< #-}
+{-# REWRITE +<-dist-++ +<-suc +<-zero +<-pack-+ #-}
 
 bag : Nat → Bag
 bag x = x +< [zero]
 
-test-comm : ∀ {a b : Nat} → bag a ++ bag b ≡ bag b ++ bag a
-test-comm = refl
+-- test-comm : ∀ {a b : Nat} → bag a ++ bag b ≡ bag b ++ bag a
+-- test-comm = refl
 
-data _∈_ : Nat → Bag → Set where
-    proof : ∀ {xs} {x} → x ∈ bag x ++ xs
-infix 19 _∈_
+-- data _∈_ : Nat → Bag → Set where
+--     proof : ∀ {xs} {x} → x ∈ bag x ++ xs
+-- infix 19 _∈_
 
-test-member : ∀ {o n m} → m ∈ bag o ++ bag m ++ bag n
-test-member {o} {n} = proof {bag o ++ bag n}
+-- test-member : ∀ {o n m} → m ∈ bag o ++ bag m ++ bag n
+-- test-member {o} {n} = proof {bag o ++ bag n}
 
-data _⊆_ : Bag → Bag → Set where
-    proof : ∀ {ys} {xs} → xs ⊆ xs ++ ys
-infix 19 _⊆_
+-- data _⊆_ : Bag → Bag → Set where
+--     proof : ∀ {ys} {xs} → xs ⊆ xs ++ ys
+-- infix 19 _⊆_
 
-test-subseteq : ∀ {m o n} → bag o ++ bag n ⊆ bag o ++ bag m ++ bag n
-test-subseteq {m} = proof {bag m}
+-- test-subseteq : ∀ {m o n} → bag o ++ bag n ⊆ bag o ++ bag m ++ bag n
+-- test-subseteq {m} = proof {bag m}
 
--- let us try introducing len
+-- -- let us try introducing len
 
-len : Bag → Nat
-len [zero] = 1
-len (zero xs) = suc (len xs)
-len (suc xs) = len xs
+-- len : Bag → Nat
+-- len [zero] = 1
+-- len (zero xs) = suc (len xs)
+-- len (suc xs) = len xs
 
-+zero : ∀ {m} → m + zero ≡ m
-+zero {m = zero}  = refl
-+zero {m = suc m} = cong suc +zero
+-- len-dist : ∀ (xs ys : Bag) → len (xs ++ ys) ≡ len xs + len ys
+-- len-dist [zero] ys = refl
+-- len-dist xs [zero] = refl
+-- len-dist (zero xs) ys = cong suc (len-dist xs ys)
+-- len-dist xs (zero ys) = cong suc (len-dist xs ys)
+-- len-dist (suc xs) (suc ys) = len-dist xs ys
 
-+suc : ∀ {m n} → m + (suc n) ≡ suc (m + n)
-+suc {m = zero}  = refl
-+suc {m = suc m} = cong suc +suc
+-- {-# REWRITE len-dist #-}
 
-{-# REWRITE +zero +suc #-}
-
-len-dist : ∀ (xs ys : Bag) → len (xs ++ ys) ≡ len xs + len ys
-len-dist [zero] ys = refl
-len-dist xs [zero] = refl
-len-dist (zero xs) ys = cong suc (len-dist xs ys)
-len-dist xs (zero ys) = cong suc (len-dist xs ys)
-len-dist (suc xs) (suc ys) = len-dist xs ys
-
-{-# REWRITE len-dist #-}
-
--- len-dist results in a sum which is not COMMASSOC, so it is not confluent!! 
+-- -- len-dist results in a sum which is not COMMASSOC, so it is not confluent!! 
