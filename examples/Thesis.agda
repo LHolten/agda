@@ -4,6 +4,7 @@ open import Agda.Builtin.Nat
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
 open import Bag
+import Bag1
 
 +zero : ∀ {m} → m + zero ≡ m
 +zero {m = zero}  = refl
@@ -22,7 +23,7 @@ open import Bag
 
 {-# COMMASSOC +comm #-}
 {-# COMMASSOC ++-comm #-}
-
+{-# COMMASSOC Bag1.++-comm #-}
 
 data Id : Nat → Set where
     id : (n : Nat) → Id n

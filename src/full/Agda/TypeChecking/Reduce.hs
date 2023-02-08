@@ -589,13 +589,17 @@ slowReduceTerm v = do
       reduceNat v = return v
       
       
--- can not instantly call listArgs and normalise, because that would be recursion at the first level.
--- thus instead we match the Def to make sure listArgs actually does something
-reducePlus :: Term -> ReduceM Term
-reducePlus v@(Def f es) = do
+-- This could be made more efficient with merge sort
+normalisePlus :: Term -> ReduceM Term
+normalisePlus v@(Def f es) = do
   commAssoc <- getCommAssocFor f
   if commAssoc then do
     args <- maybe __IMPOSSIBLE__ return $ listArgs f v
+    reportSDoc "commassoc" 30 $
+      "before reducing further" <+> prettyTCM args
+    args <- insertAll f args
+    reportSDoc "commassoc" 30 $
+      "after reducing further" <+> prettyTCM args
     let sargs = Bag.toList $ Bag.fromList args
     term <- maybe __IMPOSSIBLE__ return $ buildTerm f sargs
     return term
@@ -621,7 +625,30 @@ reducePlus v@(Def f es) = do
       lhs <- buildTerm plus xs
       Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
-reducePlus v = return v
+    insertAll :: QName -> [Term] -> ReduceM [Term]
+    insertAll plus [] = return $ []
+    insertAll plus (x : xs) = do
+      xs <- insertAll plus xs
+      insertOne plus [] x xs
+
+    insertOne :: QName -> [Term] -> Term -> [Term] -> ReduceM [Term]
+    insertOne plus xs x [] = return $ x : xs
+    insertOne plus xs x (y : ys) = do
+      xy <- tryCombine plus x y
+      case xy of
+        Just xy -> insertOne plus [] xy (xs ++ ys)
+        Nothing -> insertOne plus (y : xs) x ys
+
+    tryCombine :: QName -> Term -> Term -> ReduceM (Maybe Term)
+    tryCombine plus x y = let term = Def plus [Apply $ defaultArg x, Apply $ defaultArg y] in do
+      newTerm <- reduce term
+      case newTerm of
+        Def f _ | f == plus -> return $ Nothing
+        _ -> do
+          newTerm <- normalise newTerm
+          return $ Just newTerm
+
+normalisePlus v = return v
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
@@ -1266,7 +1293,7 @@ slowNormaliseArgs t = do
     Pi a b      -> uncurry Pi <$> normalise' (a, b)
     v@DontCare{}-> return v
     v@Dummy{}   -> return v
-  reducePlus x
+  normalisePlus x
 
 -- Note: not the default instance for Elim' since we do something special for Arg.
 instance Normalise t => Normalise (Elim' t) where
