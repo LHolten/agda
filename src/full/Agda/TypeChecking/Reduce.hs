@@ -591,39 +591,40 @@ slowReduceTerm v = do
       
 -- This could be made more efficient with merge sort
 normalisePlus :: Term -> ReduceM Term
-normalisePlus v@(Def f es) = do
-  commAssoc <- getCommAssocFor f
-  if commAssoc then do
-    args <- maybe __IMPOSSIBLE__ return $ listArgs f v
-    reportSDoc "commassoc" 30 $
-      "before reducing further" <+> prettyTCM args
-    args <- insertAll f args
-    reportSDoc "commassoc" 30 $
-      "after reducing further" <+> prettyTCM args
-    let sargs = Bag.toList $ Bag.fromList args
-    term <- maybe __IMPOSSIBLE__ return $ buildTerm f sargs
-    return term
-  else return v
-      
+normalisePlus v = reduce' v >>= \case
+  v@(Def f es) -> do
+    commAssoc <- getCommAssocFor f
+    if commAssoc then do
+      args <- listArgs f v
+      reportSDoc "commassoc" 30 $
+        "before reducing further" <+> prettyTCM args
+      args <- insertAll f args
+      -- each arg has been reduced, but we need to normalize the args of each arg
+      args <- mapM slowNormaliseArgs args
+      reportSDoc "commassoc" 30 $
+        "after reducing further" <+> prettyTCM args
+      buildTerm f $ Bag.toList $ Bag.fromList args
+    else slowNormaliseArgs v
+  v -> slowNormaliseArgs v
+  
   where
-    listArgs :: QName -> Term -> Maybe [Term]
-    listArgs plus (Def f es)
-      | f == plus = do
-        as <- allApplyElims es
-        case as of
-          [a, b] -> do
+    listArgs :: QName -> Term -> ReduceM [Term]
+    listArgs plus v = reduce' v >>= \case
+      Def f es | f == plus -> do
+        case allApplyElims es of
+          Just [a, b] -> do
             list1 <- listArgs plus (unArg a)
             list2 <- listArgs plus (unArg b)
             return $ concat [list1, list2]
-          _ -> Nothing
-    listArgs _ term = return [term]
+          _ -> __IMPOSSIBLE__
+      v -> return [v]
 
-    buildTerm :: QName -> [Term] -> Maybe Term
-    buildTerm _ [] = Nothing
-    buildTerm _ [t] = Just t
+    buildTerm :: QName -> [Term] -> ReduceM Term
+    buildTerm _ [] = __IMPOSSIBLE__
+    buildTerm _ [t] = return t
     buildTerm plus (x : xs) = do 
       lhs <- buildTerm plus xs
-      Just $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+      return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
     insertAll :: QName -> [Term] -> ReduceM [Term]
     insertAll plus [] = return $ []
@@ -640,15 +641,12 @@ normalisePlus v@(Def f es) = do
         Nothing -> insertOne plus (y : xs) x ys
 
     tryCombine :: QName -> Term -> Term -> ReduceM (Maybe Term)
-    tryCombine plus x y = let term = Def plus [Apply $ defaultArg x, Apply $ defaultArg y] in do
-      newTerm <- reduce term
+    tryCombine plus x y = do
+      newTerm <- reduce' $ Def plus [Apply $ defaultArg x, Apply $ defaultArg y]
       case newTerm of
         Def f _ | f == plus -> return $ Nothing
-        _ -> do
-          newTerm <- normalise newTerm
-          return $ Just newTerm
+        _ -> return $ Just newTerm
 
-normalisePlus v = return v
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
 -- need also to instantiate metas, see Issue 826.
@@ -1277,11 +1275,10 @@ instance Normalise t => Normalise (Type' t) where
     normalise' (El s t) = El <$> normalise' s <*> normalise' t
 
 instance Normalise Term where
-    normalise' v = ifM shouldTryFastReduce (fastNormalise v) (slowNormaliseArgs =<< reduce' v)
+    normalise' v = ifM shouldTryFastReduce (fastNormalise v) (normalisePlus v)
 
 slowNormaliseArgs :: Term -> ReduceM Term
-slowNormaliseArgs t = do
-  x <- case t of
+slowNormaliseArgs t = case t of
     Var n vs    -> Var n      <$> normalise' vs
     Con c ci vs -> Con c ci   <$> normalise' vs
     Def f vs    -> Def f      <$> normalise' vs
@@ -1293,7 +1290,6 @@ slowNormaliseArgs t = do
     Pi a b      -> uncurry Pi <$> normalise' (a, b)
     v@DontCare{}-> return v
     v@Dummy{}   -> return v
-  normalisePlus x
 
 -- Note: not the default instance for Elim' since we do something special for Arg.
 instance Normalise t => Normalise (Elim' t) where
