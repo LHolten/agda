@@ -60,7 +60,6 @@ suc x +< xs = suc (x +< xs)
 +<-dist-++ : (x : Nat) (xs ys : Bag) → x +< (xs ++ ys) ≡ x +< xs ++ x +< ys
 +<-dist-++ zero xs ys = refl
 +<-dist-++ (suc x) xs ys = cong suc (+<-dist-++ x xs ys)
--- +<-dist-++ (suc x) xs ys = +<-dist-++ x (suc xs) (suc ys)
 
 +<-suc : (x : Nat) (xs : Bag) → x +< suc xs ≡ suc (x +< xs)
 +<-suc zero xs = refl
@@ -70,10 +69,6 @@ suc x +< xs = suc (x +< xs)
 +<-zero zero xs = refl
 +<-zero (suc x) xs = cong suc (+<-zero x xs)
 
--- maybe this should be the other way around?
--- +-dist-+< : (x y : Nat) (xs : Bag) → (x + y) +< xs ≡ x +< y +< xs
--- +-dist-+< zero y xs = refl
--- +-dist-+< (suc x) y xs = cong suc (+-dist-+< x y xs)
 +<-pack-+ : (x y : Nat) (xs : Bag) → x +< y +< xs ≡ (x + y) +< xs
 +<-pack-+ zero y xs = refl
 +<-pack-+ (suc x) y xs = cong suc (+<-pack-+ x y xs)

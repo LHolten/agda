@@ -3,6 +3,7 @@ open import Agda.Builtin.List
 open import Agda.Builtin.Nat
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
+open import Agda.Builtin.List
 open import Bag
 import Bag1
 
@@ -25,28 +26,28 @@ import Bag1
 {-# COMMASSOC ++-comm #-}
 {-# COMMASSOC Bag1.++-comm #-}
 
-data Id : Nat → Set where
-    id : (n : Nat) → Id n
+data Singleton : Nat → Set where
+    just : (n : Nat) → Singleton n
 
 -- -- end of thesis stuff
 -- resolving meta variables with injectivity analysis
--- inj1 : (a b : Nat) → Id (a + b)
--- inj1 a b = id (_ + b)
+-- inj1 : (a b : Nat) → Singleton (a + b)
+-- inj1 a b = just (_ + b)
 
--- inj1c : (b : Nat) → Id (1 + b)
--- inj1c b = id (_ + b)
+-- inj1c : (b : Nat) → Singleton (1 + b)
+-- inj1c b = just (_ + b)
 
--- inj1v : (a : Nat) → Id (a + 1)
--- inj1v a = id (_ + 1)
+-- inj1v : (a : Nat) → Singleton (a + 1)
+-- inj1v a = just (_ + 1)
 
--- inj2 : (a b : Nat) → Id (a + b)
--- inj2 a b = id (a + _)
+-- inj2 : (a b : Nat) → Singleton (a + b)
+-- inj2 a b = just (a + _)
 
--- inj2v : (b : Nat) → Id (1 + b)
--- inj2v b = id (1 + _)
+-- inj2v : (b : Nat) → Singleton (1 + b)
+-- inj2v b = just (1 + _)
 
--- inj2c : (a : Nat) → Id (a + 1)
--- inj2c a = id (a + _)
+-- inj2c : (a : Nat) → Singleton (a + 1)
+-- inj2c a = just (a + _)
 
 
 -- write sorting algorithms with types like this
@@ -80,9 +81,26 @@ insert x (y ∷< yb > ys) with cmp x y
 ... | ≤{d} = x ∷< bag d ++ d +< yb > y ∷< yb > ys
 ... | ≥{d} = y ∷< bag d ++ yb > insert x ys
 
+from-list : List Nat → Bag
+from-list [] = []
+from-list (x ∷ xs) = bag x ++ from-list xs 
+
+insert-sort : (xs : List Nat) → Sorted (from-list xs)
+insert-sort [] = []
+insert-sort (x ∷ xs) = insert x (insert-sort xs)
+
+{-# TERMINATING #-}
+merge : {@0 xb : Bag} (xs : Sorted xb) {@0 yb : Bag} (ys : Sorted yb)
+    → Sorted (xb ++ yb)
+merge [] ys = ys
+merge xs [] = xs
+merge (x ∷< xb > xs) (y ∷< yb > ys) with cmp x y
+... | ≤{d} = x ∷< xb ++ bag d ++ d +< yb > merge xs (y ∷< yb > ys)
+... | ≥{d} = y ∷< bag d ++ d +< xb ++ yb > merge (x ∷< xb > xs) ys
+
+
+
 test : Sorted _
--- test = 1 ∷ []
--- test = _∷_ 1 {[]} []
 test = 1 ∷< [] > []
 
 
@@ -94,8 +112,8 @@ test = 1 ∷< [] > []
 
 
 
--- test3 : (a : Nat) → Id (suc a)
--- test3 a = id (a + _)
+-- test3 : (a : Nat) → Singleton (suc a)
+-- test3 a = just (a + _)
 
 -- data Sorted' : Nat → Set where
 --     [_] : (n : Nat) → Sorted' n

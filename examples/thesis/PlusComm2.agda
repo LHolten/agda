@@ -8,37 +8,6 @@ open import Agda.Builtin.Equality.Rewrite
 variable
     m n o : Nat
 
-cong : ∀ { a b} { A : Set a }  { B : Set b }
-       (f : A → B ) {m  n}  → m ≡ n → f m ≡ f n
-cong f refl = refl
-
-+zero : m + zero ≡ m
-+zero {m = zero}  = refl
-+zero {m = suc m} = cong suc +zero
-
-+suc : m + (suc n) ≡ suc (m + n)
-+suc {m = zero}  = refl
-+suc {m = suc m} = cong suc +suc
-
--- +assoc : m + (n + o) ≡ m + n + o
--- +assoc {m = zero} = refl
--- +assoc {m = suc m} = cong suc (+assoc {m})
-
-{-# REWRITE +zero +suc #-}
-{-# COMMASSOC _+_ #-}
-
-test : ( m + m + 1 + n + 1 ≡ 2 + (n + m) + m )
-test = refl
-
-test2 : m + (n + o) ≡ (m + n) + o
-test2 = refl
-
-test3 : m + n ≡ n + m
-test3 = refl
-
-test4 : 2 + o + n + m ≡ o + m + n + 2
-test4 = refl
-
 data Bag : Set where
     [_] : Nat → Bag
     _++_ : Bag → Bag → Bag
@@ -51,7 +20,24 @@ pattern [_,_,_,_,_,_] u v w x y z = [ u , v , w , x , y ] ++ [ z ]
 
 infixl 20 _++_
 
-{-# COMMASSOC _++_ #-}
+{-# COMMASSOC _++_  #-}
+
+mybag = [ 0 , 1 ]
+
+mybag2 = [ 1 , 0 ]
+
+get : Bag → Nat
+get [ x ] = x
+get (xs ++ ys) = get xs
+
+get-0 : get mybag ≡ 0
+get-0 = refl
+
+get-1 : get mybag2 ≡ 1
+get-1 = refl
+
+mybags-equal : mybag ≡ mybag2
+mybags-equal = refl
 
 test-comm : [ o ] ++ [ m , n ] ≡ [ o , m ] ++ [ n ]
 test-comm = refl
@@ -74,6 +60,7 @@ test-subseteq {m} = proof {[ m ]}
 -- sum of types
 data _⊕_ : Set → Set → Set where
     inj : ∀ (B : Set) {A} → A → A ⊕ B
+
 infixl 20 _⊕_
 
 {-# COMMASSOC _⊕_ #-}
@@ -81,3 +68,23 @@ infixl 20 _⊕_
 zero-to-tt : Nat → Nat ⊕ ⊤
 zero-to-tt zero = inj Nat tt
 zero-to-tt (suc n) = inj ⊤ (suc n)
+
+data ⊥ : Set where
+
+boom : ⊥ ⊕ ⊤ → ⊥
+boom (inj _ p) = p
+
+ohno : ⊥
+ohno = boom (inj ⊥ tt)
+
+postulate
+    elim : (P : A ⊕ B → Set) 
+         → (f : (x : A) → P (inj B x)) 
+         → (g : (y : B) → P (inj A y))
+         → ((pf : A ≡ B) → (x : A) → f (inj B x) ≡ f (inj A (cast pf x)))
+         → (z : A ⊕ B) → P z 
+
+    -- 
+    -- elim (λ _ → Nat) (λ x → 0) (λ x → 1) (inj Nat 42)
+
+    elim-inj₁ : elim P f g (inj B x) ≡ f 
