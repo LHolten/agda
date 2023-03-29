@@ -68,6 +68,10 @@ import Agda.TypeChecking.Telescope.Path
 import Agda.TypeChecking.Primitive.Base
 import Agda.TypeChecking.Primitive.Cubical
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Rewriting.Clause
+import Agda.TypeChecking.Rewriting.NonLinMatch
+import Agda.TypeChecking.Rewriting.NonLinPattern 
+import {-# SOURCE #-} Agda.TypeChecking.Rewriting
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars
 import {-# SOURCE #-} Agda.TypeChecking.Conversion
 import Agda.TypeChecking.Pretty
@@ -87,7 +91,7 @@ import qualified Agda.Utils.ProfileOptions as Profile
 
 import Agda.Utils.Impossible
 
-headSymbol :: Term -> TCM (Maybe TermHead)
+headSymbol :: (PureTCM m) => Term -> m (Maybe TermHead)
 headSymbol v = do -- ignoreAbstractMode $ do
   -- Andreas, 2013-02-18 ignoreAbstractMode leads to information leakage
 
@@ -267,10 +271,10 @@ checkInjectivity' f cs = fromMaybe NotInjective <.> runMaybeT $ do
 --   .fst`. In this case the head will be the head of `u` rather than `_,_`.
 checkOverapplication
   :: forall m. (HasConstInfo m)
-  => Elims -> InversionMap Clause -> m (InversionMap Clause)
+  => Elims -> InversionMap RewriteRule -> m (InversionMap RewriteRule)
 checkOverapplication es = updateHeads overapplied
   where
-    overapplied :: TermHead -> [Clause] -> m TermHead
+    overapplied :: TermHead -> [RewriteRule] -> m TermHead
     overapplied h cs | all (not . isOverapplied) cs = return h
     overapplied h cs = ifM (isSuperRigid h) (return h) (return UnknownHead)
 
@@ -296,7 +300,7 @@ checkOverapplication es = updateHeads overapplied
         GeneralizableVar{} -> __IMPOSSIBLE__
 
 
-    isOverapplied Clause{ namedClausePats = ps } = length es > length ps
+    isOverapplied RewriteRule{ rewPats = ps } = length es > length ps
 
 -- | Turn variable heads, referring to top-level argument positions, into
 --   proper heads. These might still be `VarHead`, but in that case they refer to
@@ -308,28 +312,70 @@ instantiateVarHeads
 instantiateVarHeads f es m = runMaybeT $ updateHeads (const . instHead) m
   where
     instHead :: TermHead -> MaybeT m TermHead
-    instHead h@(VarHead i)
-      | Just (Apply arg) <- es !!! i = MaybeT $ headSymbol' (unArg arg)
-      | otherwise = empty   -- impossible?
+    instHead h@(VarHead i) = return UnknownHead
+      --  Just (Apply arg) <- es !!! i = MaybeT $ headSymbol' (unArg arg)
+      --  otherwise = empty   -- impossible?
     instHead h = return h
 
 -- | Argument should be in weak head normal form.
 functionInverse
-  :: (PureTCM m, MonadError TCErr m)
+  :: (PureTCM m, MonadError TCErr m, MonadFresh NameId m)
   => Term -> m InvView
 functionInverse = \case
   Def f es -> do
-    inv <- defInverse <$> getConstInfo f
-    cubical <- optCubical <$> pragmaOptions
-    case inv of
-      NotInjective -> return NoInv
-      Inverse m -> maybe NoInv (Inv f es) <$> (traverse (checkOverapplication es) =<< instantiateVarHeads f es m)
-        -- NB: Invertible functions are never classified as
-        --     projection-like, so this is fine, we are not
-        --     missing parameters.  (Andreas, 2013-11-01)
+    -- inv <- defInverse <$> getConstInfo f
+    rewr <- getAllRulesFor f
+    rewr <- mapMaybeM (checkPossible $ Def f es) rewr
+    let m = joinHeadMaps $ map (\(h, rew) -> Map.singleton h [rew]) rewr
+    res <- fromMaybeM __IMPOSSIBLE__ $ (instantiateVarHeads f es m)
+    return (Inv f es res)
+    -- return $ Inv f es m
+    -- return NoInv
+    -- maybe NoInv (Inv f es) <$> (traverse (checkOverapplication es) =<< instantiateVarHeads f es m)
+    -- NB: Invertible functions are never classified as
+    --     projection-like, so this is fine, we are not
+    --     missing parameters.  (Andreas, 2013-11-01)
   _ -> return NoInv
+  where 
+    getAllRulesFor :: (HasConstInfo m, MonadFresh NameId m) => QName -> m [RewriteRule]
+    getAllRulesFor f = (++) <$> getRewriteRulesFor f <*> getClausesAsRewriteRules f
+    -- getAllRulesFor f = getClausesAsRewriteRules f
 
-data InvView = Inv QName [Elim] (InversionMap Clause)
+    -- precondition: term is blocked
+    checkPossible :: (PureTCM m, MonadFresh NameId m) => Term -> RewriteRule -> m (Maybe (TermHead, RewriteRule))
+    
+    checkPossible term rew@(RewriteRule q gamma _ ps rhs b isClause) = case term of
+      Def f es -> do
+        (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
+        res <- nonLinMatch gamma (t, (\es -> Def f es)) ps es
+        -- res <- liftReduce $ rewriteWith t (\es -> Def f es) rew es
+        case res of
+          -- if not blocked it means that the pattern doesn't match
+          Left (NotBlocked reason _) -> do
+            reportSDoc "tc.inj.possible" 20 $ vcat
+              [ "rewr not possible" <?> prettyTCM rew
+              , "for" <?> prettyTCM term
+              , "because" <?> pshow reason
+              ]  
+            return Nothing
+          -- if it is blocked then this pattern could work
+          -- now we need to calculate the rhs pattern, 
+          Left (Blocked _ _) -> do
+            rhs <- headSymbol $ rewRHS rew
+            case rhs of
+              Nothing -> return Nothing
+              Just head -> return $ Just (head, rew)
+          -- we probably have a shadowed clause here
+          -- all rules have to be included, so also this one
+          -- TODO: we could use the substitution to improve the rhs head
+          Right x -> do
+            rhs <- headSymbol $ rewRHS rew
+            case rhs of
+              Nothing -> return Nothing
+              Just head -> return $ Just (head, rew)
+      _ -> return Nothing
+
+data InvView = Inv QName [Elim] (InversionMap RewriteRule)
              | NoInv
 
 -- | Precondition: The first term must be blocked on the given meta and the second must be neutral.
@@ -366,6 +412,10 @@ useInjectivity dir blocker ty blk neu = locallyTC eInjectivityDepth succ $ do
             , nest 2 $ fsep $ punctuate comma $ map prettyTCM neuArgs
             , nest 2 $ "and type" <+> prettyTCM fTy
             ]
+          -- we want to make sure f is not commassoc, because that case is complicated
+          -- commAssoc <- getCommAssocFor f
+          -- when commAssoc $ fallback
+          -- when commAssoc $ patternViolation alwaysUnblock
           fs  <- getForcedArgs f
           pol <- getPolarity' cmp f
           reportSDoc "tc.inj.invert.success" 20 $ hsep ["Successful spine comparison of", prettyTCM f]
@@ -414,24 +464,34 @@ invertFunction cmp blk (Inv f blkArgs hdMap) hd fallback err success = do
       , "for" <?> pretty hd
       , nest 2 $ "args =" <+> prettyList (map prettyTCM blkArgs)
       ]                         -- Clauses with unknown heads are also possible candidates
-    case fromMaybe [] $ Map.lookup hd hdMap <> Map.lookup UnknownHead hdMap of
-      [] -> err
-      _:_:_ -> fallback
-      [cl@Clause{ clauseTel  = tel }] -> speculateMetas fallback $ do
-          let ps   = clausePats cl
-              perm = fromMaybe __IMPOSSIBLE__ $ clausePerm cl
-          -- These are what dot patterns should be instantiated at
+    let cls = fromMaybe [] $ Map.lookup hd hdMap <> Map.lookup UnknownHead hdMap
+    cls <- mapM (\RewriteRule{ rewContext = tel, rewPats = ps } -> do
           ms <- map unArg <$> newTelMeta tel
-          reportSDoc "tc.inj.invert" 20 $ vcat
-            [ "meta patterns" <+> prettyList (map prettyTCM ms)
-            , "  perm =" <+> text (show perm)
-            , "  tel  =" <+> prettyTCM tel
-            , "  ps   =" <+> prettyList (map (text . show) ps)
+          let sub   = parallelS (map PTerm $ reverse ms)
+              margs = applySubst sub ps
+          margs <- mapM nlPatToTerm margs
+          return margs
+        ) cls
+    case cls of
+      [] -> do
+        reportSDoc "tc.inj.use" 20 $ vcat
+          [ "no inverse applies"
+          , "hd     =" <+> pretty hd
+          , "blk    =" <+> prettyTCM blk
+          ]
+        err
+      margs : cls -> do
+        -- check there is only one rule that can result in the expected constructor
+        if (not $ all (\x -> x == margs) cls) then do
+          reportSDoc "tc.inj.use" 20 $ vcat
+            [ "too many inverses"
+            , "hd     =" <+> pretty hd
+            , "blk    =" <+> prettyTCM blk
             ]
-          -- and this is the order the variables occur in the patterns
-          let msAux = permute (invertP __IMPOSSIBLE__ $ compactP perm) ms
-          let sub   = parallelS (reverse ms)
-          margs <- runReaderT (evalStateT (mapM metaElim ps) msAux) sub
+          fallback
+        else speculateMetas fallback $ do
+      -- [cl@RewriteRule{ rewContext = tel }] -> speculateMetas fallback $ do
+          -- let ps = rewPats cl
           reportSDoc "tc.inj.invert" 20 $ vcat
             [ "inversion"
             , nest 2 $ vcat
@@ -463,38 +523,58 @@ invertFunction cmp blk (Inv f blkArgs hdMap) hd fallback err success = do
                 ]
               return RollBackMetas
   where
-    nextMeta :: (MonadState [Term] m, MonadFail m) => m Term
-    nextMeta = do
-      m : ms <- get
-      put ms
-      return m
+    mostGeneralRule :: PureTCM m => [RewriteRule] -> [RewriteRule] -> m (Maybe RewriteRule)
+    mostGeneralRule [] _ = return Nothing
+    mostGenrealRule (rew@(RewriteRule q gamma f ps rhs b isClause) : rest) notBest = do
+      (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
+      res <- mapM (\RewriteRule{rewPats = pats} -> do
+          margs::[Elim' Term] <- mapM nlPatToTerm pats
+          res <- nonLinMatch gamma (t, (\es -> Def f es)) ps margs
+          case res of
+            Left _ -> return False
+            Right _ -> return True
+        ) $ rest ++ notBest
+      if all (\x -> x) res then
+        return $ Just rew
+      else
+        mostGeneralRule rest (rew : notBest)
 
-    dotP :: MonadReader Substitution m => Term -> m Term
-    dotP v = do
-      sub <- ask
-      return $ applySubst sub v
 
-    metaElim
-      :: (MonadState [Term] m, MonadReader Substitution m, HasConstInfo m, MonadFail m)
-      => Arg DeBruijnPattern -> m Elim
-    metaElim (Arg _ (ProjP o p))  = Proj o <$> getOriginalProjection p
-    metaElim (Arg info p)         = Apply . Arg info <$> metaPat p
+    -- nextMeta :: (MonadState [Term] m, MonadFail m) => m Term
+    -- nextMeta = do
+    --   m : ms <- get
+    --   put ms
+    --   return m
 
-    metaArgs
-      :: (MonadState [Term] m, MonadReader Substitution m, MonadFail m)
-      => [NamedArg DeBruijnPattern] -> m Args
-    metaArgs args = mapM (traverse $ metaPat . namedThing) args
+    -- dotP :: MonadReader Substitution m => Term -> m Term
+    -- dotP v = do
+    --   sub <- ask
+    --   return $ applySubst sub v
 
-    metaPat
-      :: (MonadState [Term] m, MonadReader Substitution m, MonadFail m)
-      => DeBruijnPattern -> m Term
-    metaPat (DotP _ v)       = dotP v
-    metaPat (VarP _ _)       = nextMeta
-    metaPat (IApplyP{})      = nextMeta
-    metaPat (ConP c mt args) = Con c (fromConPatternInfo mt) . map Apply <$> metaArgs args
-    metaPat (DefP o q args)  = Def q . map Apply <$> metaArgs args
-    metaPat (LitP _ l)       = return $ Lit l
-    metaPat ProjP{}          = __IMPOSSIBLE__
+    -- -- metaElim
+    --   :: (MonadState [Term] m, MonadReader Substitution m, HasConstInfo m, MonadFail m)
+    --   => Elim' NLPat -> m Elim
+    -- metaElim (Proj o p)  = Proj o <$> getOriginalProjection p
+    -- metaElim (Apply (Arg info p)) = Apply . Arg info <$> metaPat p
+    -- metaElim (IApply _ _ _) = __IMPOSSIBLE__
+
+    -- metaArgs
+    --   :: (MonadState [Term] m, MonadReader Substitution m, MonadFail m)
+    --   => [Elim' NLPat] -> m Args
+    -- metaArgs args = do
+    --   args <- fromMaybeM __IMPOSSIBLE__ $ return $ allApplyElims args      
+    --   mapM (traverse $ metaPat) args
+
+    -- metaPat
+    --   :: (MonadState [Term] m, MonadReader Substitution m, MonadFail m)
+    --   => NLPat -> m Term
+    -- metaPat (PVar _ _)       = nextMeta
+    -- metaPat (PDef f args)  = Def f . map Apply <$> metaArgs args
+    -- metaPat (PLam _ _) = __IMPOSSIBLE__ -- we don't support higher pattern matching yet
+    -- metaPat (PPi _ _) = __IMPOSSIBLE__ -- same as PLam
+    -- metaPat (PSort _) = __IMPOSSIBLE__ -- no support for matching sorts either
+    -- metaPat (PBoundVar _ _) = __IMPOSSIBLE__
+    -- metaPat (PTerm t) = return t
 
 forcePiUsingInjectivity :: Type -> TCM Type
 forcePiUsingInjectivity t = reduceB t >>= \ case
