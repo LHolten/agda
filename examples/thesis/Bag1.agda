@@ -1,12 +1,9 @@
 {-# OPTIONS --rewriting --no-fast-reduce -v commassoc:30 #-}
 
 open import Agda.Builtin.Nat
+open import PlusComm1
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
-
-cong : ∀ {A B : Set} (f : A → B) 
-    {m n} → m ≡ n → f m ≡ f n
-cong f refl = refl
 
 -- this is always not empty
 data Bag : Set where

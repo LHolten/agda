@@ -577,8 +577,13 @@ compareAtom cmp t m n =
               if commAssoc then do
                 m <- normalise m
                 n <- normalise n
-                unless (m == n) $ patternViolation alwaysUnblock
-                return ()
+                SynEq.checkSyntacticEquality m n (\_ _ -> return ()) $ \_ _ -> do
+                reportSDoc "commassoc" 20 $ vcat 
+                    [ "sides not yet equal"
+                    , prettyTCM m
+                    , prettyTCM n
+                    ]
+                patternViolation alwaysUnblock
               else do
                 -- 3c. Oh no, we actually have to work and compare the eliminations!
                 a <- computeElimHeadType f es es'

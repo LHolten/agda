@@ -362,17 +362,15 @@ functionInverse = \case
           -- now we need to calculate the rhs pattern, 
           Left (Blocked _ _) -> do
             rhs <- headSymbol $ rewRHS rew
-            case rhs of
-              Nothing -> return Nothing
-              Just head -> return $ Just (head, rew)
+            let head = fromMaybe UnknownHead rhs
+            return $ Just (head, rew)
           -- we probably have a shadowed clause here
           -- all rules have to be included, so also this one
           -- TODO: we could use the substitution to improve the rhs head
           Right x -> do
             rhs <- headSymbol $ rewRHS rew
-            case rhs of
-              Nothing -> return Nothing
-              Just head -> return $ Just (head, rew)
+            let head = fromMaybe UnknownHead rhs
+            return $ Just (head, rew)
       _ -> return Nothing
 
 data InvView = Inv QName [Elim] (InversionMap RewriteRule)
@@ -465,79 +463,78 @@ invertFunction cmp blk (Inv f blkArgs hdMap) hd fallback err success = do
       , nest 2 $ "args =" <+> prettyList (map prettyTCM blkArgs)
       ]                         -- Clauses with unknown heads are also possible candidates
     let cls = fromMaybe [] $ Map.lookup hd hdMap <> Map.lookup UnknownHead hdMap
-    cls <- mapM (\RewriteRule{ rewContext = tel, rewPats = ps } -> do
-          ms <- map unArg <$> newTelMeta tel
-          let sub   = parallelS (map PTerm $ reverse ms)
-              margs = applySubst sub ps
-          margs <- mapM nlPatToTerm margs
-          return margs
-        ) cls
-    case cls of
-      [] -> do
-        reportSDoc "tc.inj.use" 20 $ vcat
-          [ "no inverse applies"
-          , "hd     =" <+> pretty hd
-          , "blk    =" <+> prettyTCM blk
-          ]
-        err
-      margs : cls -> do
-        -- check there is only one rule that can result in the expected constructor
-        if (not $ all (\x -> x == margs) cls) then do
+    -- check there is only one rule that can result in the expected constructor
+    cl <- mostGeneralRule cls []
+    case cl of
+      Nothing -> case cls of
+        [] -> do
+          reportSDoc "tc.inj.use" 20 $ vcat
+            [ "no inverse applies"
+            , "hd     =" <+> pretty hd
+            , "blk    =" <+> prettyTCM blk
+            ]
+          err
+        _ -> do
           reportSDoc "tc.inj.use" 20 $ vcat
             [ "too many inverses"
             , "hd     =" <+> pretty hd
             , "blk    =" <+> prettyTCM blk
             ]
           fallback
-        else speculateMetas fallback $ do
-      -- [cl@RewriteRule{ rewContext = tel }] -> speculateMetas fallback $ do
-          -- let ps = rewPats cl
-          reportSDoc "tc.inj.invert" 20 $ vcat
-            [ "inversion"
-            , nest 2 $ vcat
-              [ "lhs  =" <+> prettyTCM margs
-              , "rhs  =" <+> prettyTCM blkArgs
-              , "type =" <+> prettyTCM fTy
-              ]
+      Just cl@RewriteRule{ rewContext = tel, rewPats = ps } -> speculateMetas fallback $ do
+        ms <- map unArg <$> newTelMeta tel
+        let sub   = parallelS (map PTerm $ reverse ms)
+            margs = applySubst sub ps
+        margs <- mapM nlPatToTerm margs
+        reportSDoc "tc.inj.invert" 20 $ vcat
+          [ "inversion"
+          , nest 2 $ vcat
+            [ "lhs  =" <+> prettyTCM margs
+            , "rhs  =" <+> prettyTCM blkArgs
+            , "type =" <+> prettyTCM fTy
             ]
-          -- Since we do not care for the value of non-variant metas here,
-          -- we can treat 'Nonvariant' as 'Invariant'.
-          -- That ensures these metas do not remain unsolved.
-          pol <- purgeNonvariant <$> getPolarity' cmp f
-          fs  <- getForcedArgs f
-          -- The clause might not give as many patterns as there
-          -- are arguments (point-free style definitions).
-          let blkArgs' = take (length margs) blkArgs
-          compareElims pol fs fTy (Def f []) margs blkArgs'
+          ]
+        -- Since we do not care for the value of non-variant metas here,
+        -- we can treat 'Nonvariant' as 'Invariant'.
+        -- That ensures these metas do not remain unsolved.
+        pol <- purgeNonvariant <$> getPolarity' cmp f
+        fs  <- getForcedArgs f
+        -- The clause might not give as many patterns as there
+        -- are arguments (point-free style definitions).
+        let blkArgs' = take (length margs) blkArgs
+        compareElims pol fs fTy (Def f []) margs blkArgs'
 
-          -- Check that we made progress.
-          r <- liftReduce $ unfoldDefinitionStep False (Def f []) f blkArgs
-          case r of
-            YesReduction _ blk' -> do
-              reportSDoc "tc.inj.invert.success" 20 $ hsep ["Successful inversion of", prettyTCM f, "at", pretty hd]
-              KeepMetas <$ success blk'
-            NoReduction{}       -> do
-              reportSDoc "tc.inj.invert" 30 $ vcat
-                [ "aborting inversion;" <+> prettyTCM blk
-                , "does not reduce"
-                ]
-              return RollBackMetas
-  where
-    mostGeneralRule :: PureTCM m => [RewriteRule] -> [RewriteRule] -> m (Maybe RewriteRule)
-    mostGeneralRule [] _ = return Nothing
-    mostGenrealRule (rew@(RewriteRule q gamma f ps rhs b isClause) : rest) notBest = do
-      (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
-      res <- mapM (\RewriteRule{rewPats = pats} -> do
-          margs::[Elim' Term] <- mapM nlPatToTerm pats
-          res <- nonLinMatch gamma (t, (\es -> Def f es)) ps margs
-          case res of
-            Left _ -> return False
-            Right _ -> return True
-        ) $ rest ++ notBest
-      if all (\x -> x) res then
-        return $ Just rew
-      else
-        mostGeneralRule rest (rew : notBest)
+        -- Check that we made progress.
+        r <- liftReduce $ unfoldDefinitionStep False (Def f []) f blkArgs
+        case r of
+          YesReduction _ blk' -> do
+            reportSDoc "tc.inj.invert.success" 20 $ hsep ["Successful inversion of", prettyTCM f, "at", pretty hd]
+            KeepMetas <$ success blk'
+          NoReduction{}       -> do
+            reportSDoc "tc.inj.invert" 30 $ vcat
+              [ "aborting inversion;" <+> prettyTCM blk
+              , "does not reduce"
+              ]
+            return RollBackMetas
+
+mostGeneralRule :: PureTCM m => [RewriteRule] -> [RewriteRule] -> m (Maybe RewriteRule)
+mostGeneralRule [] notBest = return Nothing
+mostGeneralRule (rew : rest) notBest = do
+  let f = rewHead rew
+      ps = rewPats rew
+      gamma = rewContext rew
+  (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
+  res <- mapM (\RewriteRule{rewPats = pats} -> do
+      margs::[Elim' Term] <- mapM nlPatToTerm pats
+      res <- nonLinMatch gamma (t, (\es -> Def f es)) ps margs
+      case res of
+        Left _ -> return False
+        Right _ -> return True
+    ) $ rest ++ notBest
+  if all (\x -> x) res then
+    return $ Just rew
+  else
+    mostGeneralRule rest (rew : notBest)
 
 
     -- nextMeta :: (MonadState [Term] m, MonadFail m) => m Term
