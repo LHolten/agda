@@ -552,7 +552,18 @@ slowReduceTerm v = do
 --    and seems to save 2% sec on the standard library
 --      MetaV x args -> notBlocked . MetaV x <$> reduce' args
       MetaV x es -> iapp es
-      Def f es   -> flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
+      Def f es   -> do
+        commAssoc <- getCommAssocFor f
+        if commAssoc then do
+          args <- listArgs f (Def f es)
+          args <- insertAll f args
+          res <- buildTerm f (ignoreBlocking args)
+          if (getBlocker args) == neverUnblock then
+            return $ notBlocked res
+          else 
+            return $ blockedOn (getBlocker args) res
+        else
+          flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
       Con c ci es -> do
           -- Constructors can reduce' when they come from an
           -- instantiated module.
@@ -587,8 +598,68 @@ slowReduceTerm v = do
               Lit (LitNat n) -> Lit $ LitNat $ n + 1
               w              -> Con c ci [Apply $ defaultArg w]
       reduceNat v = return v
+
+      listArgs :: QName -> Term -> ReduceM [Term]
+      listArgs plus v = do 
+        -- we do not want to reduce if it is not neccessary
+        -- also, on the first iteration this would cause infinite recursion
+        v <- case v of 
+          Def f es | f == plus -> return v
+          _ -> reduce' v
+        case v of
+          Def f es | f == plus -> case allApplyElims es of
+            Just [a, b] -> do
+              list1 <- listArgs plus (unArg a)
+              list2 <- listArgs plus (unArg b)
+              return $ concat [list1, list2]
+            _ -> __IMPOSSIBLE__
+          _ -> return [v]
+        
+      insertAll :: QName -> [Term] -> ReduceM (Blocked [Term])
+      insertAll plus [] = return $ notBlocked []
+      insertAll plus (x : xs) = do
+        xs <- insertAll plus xs
+        res <- insertOne plus [] x (ignoreBlocking xs)
+        let blocker1 = getBlocker xs
+            blocker2 = getBlocker res
+            blocker = unblockOnEither blocker1 blocker2
+        return $ blockedOn blocker (ignoreBlocking res)
+
+      insertOne :: QName -> [Term] -> Term -> [Term] -> ReduceM (Blocked [Term])
+      insertOne plus xs x [] = return $ notBlocked $ x : xs
+      insertOne plus xs x (y : ys) = do
+        xy <- tryCombine plus x y
+        case ignoreBlocking xy of
+          Just xy -> insertOne plus [] xy (xs ++ ys)
+          Nothing -> do 
+            res <- insertOne plus (y : xs) x ys
+            let blocker1 = getBlocker xy
+                blocker2 = getBlocker res
+                blocker = unblockOnEither blocker1 blocker2
+            return $ blockedOn blocker (ignoreBlocking res)
+
+      tryCombine :: QName -> Term -> Term -> ReduceM (Blocked (Maybe Term))
+      tryCombine plus x y = do
+        res <- unfoldDefinitionStep False (Def plus []) plus [Apply $ defaultArg x, Apply $ defaultArg y]
+        case res of
+          YesReduction _ v -> case v of
+            Def f _ | f == plus -> return $ notBlocked Nothing
+            v -> return $ notBlocked $ Just v
+          NoReduction v -> return $ blockedOn (getBlocker v) Nothing
+
+        -- newTerm <- unfoldDefinitionE False reduceB' (Def plus []) plus [Apply $ defaultArg x, Apply $ defaultArg y]
+        -- case ignoreBlocking newTerm of
+        --       Def f _ | f == plus -> return $ notBlocked Nothing
+        --       v -> return $ blockedOn (getBlocker newTerm) (Just v)
       
-      
+      buildTerm :: QName -> [Term] -> ReduceM (Term)
+      buildTerm _ [] = __IMPOSSIBLE__
+      buildTerm _ [t] = return t
+      buildTerm plus (x : xs) = do 
+        lhs <- buildTerm plus xs
+        return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+
+
 -- This could be made more efficient with merge sort
 normalisePlus :: Term -> ReduceM Term
 normalisePlus v = reduce' v >>= \case
@@ -596,10 +667,9 @@ normalisePlus v = reduce' v >>= \case
     commAssoc <- getCommAssocFor f
     if commAssoc then do
       args <- listArgs f v
+      -- each arg has been reduced, but we need to normalize the args of each arg
       reportSDoc "commassoc" 30 $
         "before reducing further" <+> prettyTCM args
-      args <- insertAll f args
-      -- each arg has been reduced, but we need to normalize the args of each arg
       args <- mapM slowNormaliseArgs args
       reportSDoc "commassoc" 30 $
         "after reducing further" <+> prettyTCM args
@@ -609,7 +679,7 @@ normalisePlus v = reduce' v >>= \case
   
   where
     listArgs :: QName -> Term -> ReduceM [Term]
-    listArgs plus v = reduce' v >>= \case
+    listArgs plus v = case v of
       Def f es | f == plus -> do
         case allApplyElims es of
           Just [a, b] -> do
@@ -625,27 +695,6 @@ normalisePlus v = reduce' v >>= \case
     buildTerm plus (x : xs) = do 
       lhs <- buildTerm plus xs
       return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
-
-    insertAll :: QName -> [Term] -> ReduceM [Term]
-    insertAll plus [] = return $ []
-    insertAll plus (x : xs) = do
-      xs <- insertAll plus xs
-      insertOne plus [] x xs
-
-    insertOne :: QName -> [Term] -> Term -> [Term] -> ReduceM [Term]
-    insertOne plus xs x [] = return $ x : xs
-    insertOne plus xs x (y : ys) = do
-      xy <- tryCombine plus x y
-      case xy of
-        Just xy -> insertOne plus [] xy (xs ++ ys)
-        Nothing -> insertOne plus (y : xs) x ys
-
-    tryCombine :: QName -> Term -> Term -> ReduceM (Maybe Term)
-    tryCombine plus x y = do
-      newTerm <- reduce' $ Def plus [Apply $ defaultArg x, Apply $ defaultArg y]
-      case newTerm of
-        Def f _ | f == plus -> return $ Nothing
-        _ -> return $ Just newTerm
 
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
