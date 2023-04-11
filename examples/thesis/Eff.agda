@@ -2,128 +2,192 @@
 
 open import Agda.Builtin.Nat
 open import Agda.Builtin.Bool
+open import Agda.Builtin.Maybe
+open import Agda.Builtin.Sigma
+open import Agda.Primitive
 open import Agda.Builtin.Unit
 open import Agda.Builtin.List
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
+open import Agda.Builtin.Reflection
+open import PlusComm1
+-- open import Agda.Builtin.Cubical.Path
 
+get-eff : Nat → Set
+get-eff 0 = List Bool
+get-eff 1 = List Nat
+get-eff _ = ⊤
 
-
--- postulate
---     instance
---         ListMonoid : ∀ {a} {A : Set a} → Monoid (List A)
-
---     Eff : Set₁
---     Ø : Eff
---     eff : Set → Eff
---     _++_ : Eff → Eff → Eff
---     l-Ø : (xs : Eff) → Ø ++ xs ≡ xs
---     r-Ø : (xs : Eff) → xs ++ Ø ≡ xs
---     ++-comm : (xs ys : Eff) → xs ++ ys ≡ ys ++ xs
---     ++-assoc : (xs ys zs : Eff) → (xs ++ ys) ++ zs ≡ xs ++ (ys ++ zs)
-
--- {-# COMMASSOC ++-comm #-}
--- {-# REWRITE l-Ø r-Ø #-}
-
--- postulate
---     Emit : Eff → Set₁
---     emit-just : {E : Set} {ES : Eff} → E → Emit (eff E ++ ES)
-    
---     emit-elim : ∀ {l} (P : (ES : Eff) → Set l)
---               → (f : {E : Set} → (ES : Eff) → E → P (eff E ++ ES) )
---               → {ES : Eff} → Emit ES → P ES
-
---     emit-elim-rewr : ∀ {l} (P : (ES : Eff) → Set l)
---               → (f : {E : Set} → (ES : Eff) → E → P (eff E ++ ES) )
---               → {E : Set} {ES : Eff} {e : E} 
---               → emit-elim P f {eff E ++ ES} (emit-just {E} {ES} e) ≡ f {E} ES e
-
-record Monoid {a} (A : Set a) : Set a where
+record Monoid (A : Set) : Set₁ where
   field
     mempty : A
     _<>_   : A → A → A
+    index : Σ Nat λ n → get-eff n ≡ A
 open Monoid {{...}}
 
+infixl 20 _&&_
+_&&_ : Bool → Bool → Bool
+true && x = x
+false && _ = false
+-- x && true = x
+-- _ && false = false
+
 postulate
-    instance
-        ListMonoid : ∀ {a} {A : Set a} → Monoid (List A)
+    -- _∈_ : Set → List Nat → bool
+    -- l-Ø : (xs : Eff []) → Ø && xs ≡ xs
+    -- r-Ø : (xs : Eff []) → xs && Ø ≡ xs
+    x&&true : ∀ {x} → x && true ≡ x
+    &&false : ∀ {x} → x && false ≡ false
+    &&-comm : ∀ (xs ys : Bool) → xs && ys ≡ ys && xs
+    &&-assoc : ∀ (xs ys zs : Bool) → (xs && ys) && zs ≡ xs && (ys && zs)
+
+{-# REWRITE x&&true &&false #-}
+{-# COMMASSOC &&-comm #-}
 
 
-data Index : List Set → Set → Set where
-    zero : ∀ {T ES} → Index (T ∷ ES) T
-    suc : ∀ {E ES T} → {{Index ES T}} → Index (E ∷ ES) T
+_++_ : {A : Set} → List A → List A → List A
+[] ++ r = r
+(x ∷ l) ++ r = x ∷ (l ++ r)
 
-instance 
-    zero-idx : ∀ {T ES} → Index (T ∷ ES) T
-    zero-idx = zero
+xs++[] : ∀ {A} (xs : List A) → xs ++ [] ≡ xs
+xs++[] [] = refl
+xs++[] (x ∷ xs) = cong (_∷_ x) (xs++[] xs)
+
+{-# REWRITE xs++[] #-}
 
 
-data WithEff (f : List Set) : (O : Set) → Set₁ where
-    pure : ∀ {O} → O → WithEff f O
-    emit : ∀ {E} → {{Index f E}} → E → WithEff f ⊤
-    _>>_ : ∀ {O} → WithEff f ⊤ → WithEff f O → WithEff f O
-    _>>=_ : ∀ {X O} → WithEff f X → (X → WithEff f O) → WithEff f O
+data WithEff : ∀ {L : List Nat} (v : Bool) (O : Set) → Set₁ where
+    pure : ∀ {v O} → O → WithEff {[]} v O
+    emit : ∀ {L E v} → get-eff E → WithEff {E ∷ L} v ⊤
+    inc : ∀ {L E v O} → WithEff {L} v O → WithEff {E ∷ L} v O
+    _>>=_ : ∀ {L v X O} → WithEff {L} v X → (X → WithEff {L} v O) → WithEff {L} v O
+    fail : ∀ {L O} → WithEff {L} false O
 
-record Handle (O E : Set) : Set where
-    constructor _,_
-    field
-        res : O
-        eff : E
+_>>_ : ∀ {L v O} → WithEff {L} v ⊤ → WithEff {L} v O → WithEff {L} v O
+left >> right = left >>= λ tt → right
 
-handle : ∀ {E ES O} → WithEff (E ∷ ES) O → {{Monoid E}} → WithEff ES (Handle O E)
-handle (pure o) = pure (o , mempty)
-handle (emit ⦃ zero ⦄ e) = pure (tt , e)
-handle (emit ⦃ suc ⦄ e) = do
-    emit e
-    pure (tt , mempty)
-handle (left >> right) = do
-    (tt , e1) ← handle left
-    (r , e2) ← handle right
-    pure (r , (e1 <> e2)) 
-handle (left >>= right) = do
-    (l , e1) ← handle left
-    (r , e2) ← handle (right l)
-    pure (r , (e1 <> e2))
+raise : ∀ {B v L O} → WithEff {L} true O → WithEff {B ++ L} v O
+raise {[]} {false} s = fail
+raise {[]} {true} s = s
+raise {E ∷ L} {v} s = inc (raise {L} {v} s)
 
-eval : ∀ {O} → WithEff [] O → O
+smart-pure : ∀ {B v O} → O → WithEff {B} v O
+smart-pure {B} {v} o = raise {B} {v} (pure o)
+
+data Index (x : Nat) : (List Nat) → Set where
+    here : ∀ {xs} → Index x (x ∷ xs)
+    there : ∀ {y xs} → Index x xs → Index x (y ∷ xs)
+    nvm : Index x []
+
+cmp : (x y : Nat) → Maybe (x ≡ y)
+cmp zero zero = just refl
+cmp zero (suc y) = nothing
+cmp (suc x) zero = nothing
+cmp (suc x) (suc y) = case (cmp x y) of λ where
+    (just refl) → just refl
+    nothing → nothing
+
+idx : ∀ x xs → Index x xs
+idx y [] = nvm
+idx y (x ∷ xs) = case (cmp x y) of λ where
+    (just refl) → here
+    nothing → there (idx y xs)
+
+eff-idx : ∀ {x xs} → Index x xs → Bool
+eff-idx here = true
+eff-idx (there i) = eff-idx i
+eff-idx nvm = false
+
+eff : ∀ {L : List Nat} (E : Nat) → Bool
+eff {xs} E = eff-idx (idx E xs)
+
+emit-idx : ∀ {v x xs} → (i : Index x xs) → get-eff x → WithEff {xs} (v && eff-idx i) ⊤
+emit-idx here e = emit e
+emit-idx {v} (there i) e = inc (emit-idx {v} i e)
+emit-idx nvm e = fail
+
+smart-emit : ∀ {E L v} → get-eff E → WithEff {L} (v && eff {L} E) ⊤
+smart-emit {E} {xs} {v} e = emit-idx {v} (idx E xs) e
+
+
+data Handle (O E : Set) : Set where
+    _,_ : O → E → Handle O E
+
+
+handle : ∀ {e L O v} → {{f : Monoid (get-eff e)}} → WithEff {e ∷ L} v O → WithEff {L} v (Handle O (get-eff e))
+handle fail = fail
+handle (emit e) = smart-pure (tt , e)
+handle (inc s) = do
+    r ← s
+    smart-pure (r , mempty)
+handle (s1 >>= s2) = do
+    (l , e1) ← handle s1
+    (r , e2) ← handle (s2 l)
+    smart-pure (r , (e1 <> e2))
+
+eval : ∀ {O} → WithEff {[]} true O → O
 eval (pure x) = x
-eval (left >> right) = eval right
-eval (left >>= right) = eval (right (eval left))
+eval (s1 >>= s2) = eval (s2 (eval s1))
 
+instance
+  NatMonoid : Monoid (List Nat)
+  mempty {{NatMonoid}} = []
+  _<>_   {{NatMonoid}} xs ys = xs ++ ys
+  index  {{NatMonoid}} = 1 , refl
 
-test : ∀ {f} → {{Index f (List Nat)}} → {{Index f (List Bool)}} → WithEff f ⊤
-test = do
-    emit (10 ∷ [])
-    emit (true ∷ [])
-    emit (42 ∷ [])
+instance
+  BoolMonoid : Monoid (List Bool)
+  mempty {{BoolMonoid}} = []
+  _<>_   {{BoolMonoid}} xs ys = xs ++ ys
+  index  {{BoolMonoid}} = 0 , refl
+
+test : ∀ {L} → WithEff {L} (eff {L} 0 && eff {L} 1) ⊤
+test {L} = do
+    smart-emit {1} {_} {eff {L} 0} (10 ∷ [])
+    smart-emit {0} {_} {eff {L} 1} (true ∷ [])
+    smart-emit {1} {_} {eff {L} 0} (42 ∷ [])
 
 main : List Nat
 main = eval do
-    (bools , nats) ← handle do
-        (tt , bools) ← handle test
-        pure bools
-    pure nats
+    (nats , bools) ← handle {0} do
+        (tt , nats) ← handle {1} test
+        smart-pure nats
+    smart-pure nats
 
 
+main1 : ∀ {L} → WithEff {L} (eff {L} 0) (List Nat)
+main1 = do
+    (tt , nats) ← handle {1} test
+    smart-pure nats
 
--- data WithEff : Eff → Set → Set₁ where
---     pure : ∀ {ES O} → O → WithEff ES O
---     -- emit : ∀ {E ES} → E → WithEff (eff E ++ ES) ⊤
---     emit : ∀ {ES} → Emit ES → WithEff ES ⊤
---     _>>_ : ∀ {ES O} → WithEff ES ⊤ → WithEff ES O → WithEff ES O
+-- -- data Singleton : List Nat → Set₁ where
+-- --     just : (n : List Nat) → Singleton n
 
--- handle : ∀ {E ES} → WithEff (eff E ++ ES) ⊤ → {{Monoid E}} → WithEff ES E
--- handle (pure o) = pure mempty
--- handle {E} {ES} (emit e) = emit-elim (λ _ → WithEff ES E) (λ 
---     { {E} _ e → {!   !}
---     ; {_} _ o → {!   !} 
---     }) e
--- handle _ = {!   !}
+-- -- test-mix : Singleton (Nat ∷ Bool ∷ [])
+-- -- test-mix = just (mix (Nat ∷ []) (Bool ∷ []))
 
--- data IO : Set where
---     print : Nat → IO
+-- -- test : ∀ {ES} → WithEff (mix ES (mix (List Bool ∷ []) (List Nat ∷ []))) ⊤
+-- -- test = do
+-- --     smart-emit (10 ∷ [])
+-- --     smart-emit (true ∷ [])
+-- --     smart-emit (42 ∷ [])
 
--- test : WithEff (eff IO) ⊤
--- test = do
---     emit (emit-just (print 10))
---     emit (emit-just (print 42))
+-- -- data WithBag : (ES : Eff) (o : Set) → Set₁ where
+-- --     pure : ∀ {ES O} → O → WithEff ES O
+
+-- -- lower : ∀ (E ES) → WithBag (bag E && ES) → WithEff (E ∷ ES)
+
+
+-- -- postulate
+-- --     choose : ∀ {e es E ES O} 
+-- --         → WithEff (E ∷ ((e ∷ es) && ES)) O
+-- --         → WithEff (e ∷ (es && (E ∷ ES))) O
+-- --         → WithEff ((e ∷ es) && (E ∷ ES)) O
+
+-- -- raise : ∀ {ES ES' O} → WithEff ES' O → WithEff (ES && ES') O
+-- -- raise {Ø} s = s
+-- -- raise {e ∷ es} (pure x) = inc (raise (pure x))
+-- -- raise {e ∷ es} (emit {E} {ES} x) = choose {e} {es} {E} {ES} (emit x) (inc (raise {es} (emit {E} {ES} x)))
+-- -- raise {e ∷ es} (inc {E} {ES} s) = choose {e} {es} {E} {ES} (inc (raise {e ∷ es} s)) (inc (raise {es} (inc {E} {ES} s)))
+-- -- raise {es} (s >>= x) = raise {es} s >>= λ r → raise {es} (x r)
+    
