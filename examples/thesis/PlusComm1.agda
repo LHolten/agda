@@ -1,4 +1,4 @@
-{-# OPTIONS --rewriting --no-fast-reduce -v tc.inj:20 #-}
+{-# OPTIONS --rewriting --no-fast-reduce -v tc.inj.use:20 #-}
 
 open import Agda.Builtin.Nat
 open import Agda.Builtin.Equality
@@ -9,6 +9,9 @@ open import Agda.Builtin.Unit
 cong : ∀ { a b} { A : Set a }  { B : Set b }
        (f : A → B ) {m  n}  → m ≡ n → f m ≡ f n
 cong f refl = refl
+
+case_of_ : ∀ {l₁ l₂} {A : Set l₁} {B : Set l₂} → A → (A → B) → B
+case x of f = f x
 
 +zero : ∀ {m} → m + zero ≡ m
 +zero {m = zero}  = refl
@@ -28,7 +31,7 @@ cong f refl = refl
 +assoc zero y z = refl
 +assoc (suc x) y z = cong suc (+assoc x y z)
 
--- {-# COMMASSOC +comm #-}
+{-# COMMASSOC +comm #-}
 
 data Singleton : Nat → Set where
     just : (n : Nat) → Singleton n
@@ -47,11 +50,12 @@ inj1v a = just (_ + 1)
 -- inj2 : (a b : Nat) → Singleton (a + b)
 -- inj2 a b = just (a + _)
 
+-- inj2c : (a : Nat) → Singleton (suc a)
+-- inj2c a = just (a + _)
+
 inj2v : (b : Nat) → Singleton (suc b)
 inj2v b = just (1 + _)
 
--- inj2c : (a : Nat) → Singleton (suc a)
--- inj2c a = just (a + _)
 
 infixr 20 _⊓_
 _⊓_ : Nat → Nat → Nat

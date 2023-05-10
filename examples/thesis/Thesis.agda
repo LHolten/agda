@@ -16,37 +16,37 @@ data Compare : Nat → Nat → Set where
     ≤ : {d x : Nat} → Compare x (x + d)
     ≥ : {d x : Nat} → Compare (x + d) x
 
-inc : {x y : Nat} → Compare x y → Compare (suc x) (suc y)
-inc (≤{d}) = ≤{d}
-inc (≥{d}) = ≥{d}
-
 cmp : (x y : Nat) → Compare x y
 cmp zero y = ≤
 cmp x zero = ≥
-cmp (suc x) (suc y) = inc (cmp x y)
+cmp (suc x) (suc y) = case (cmp x y) of \where
+    (≤{d}) → ≤{d}
+    (≥{d}) → ≥{d}
 
 infixr 5 _∷_
-data Sorted : Bag → Set where
+data Sorted : (@0 _ : Bag) → Set where
     [] : Sorted Ø
     _∷_ : (x : Nat) {@0 xb : Bag} → Sorted (x +< xb) 
         → Sorted (bag x ++ x +< xb)
 
--- turbofish
-infixr 5 _∷<_>_
-pattern _∷<_>_ x xb xs = _∷_ x {xb} xs
+data UnSorted : (@0 _ : Bag) → Set where
+    [] : UnSorted Ø
+    _∷_ : (x : Nat) {@0 xb : Bag} → UnSorted xb 
+        → UnSorted (bag x ++ xb)
+
 
 insert : (x : Nat) {@0 yb : Bag} (ys : Sorted yb) 
     → Sorted (bag x ++ yb)
 insert x [] = x ∷ []
-insert x (y ∷ ys) with cmp x y
-... | ≤ = x ∷ y ∷ ys
-... | ≥ = y ∷ insert x ys
+insert x (y ∷ ys) = case (cmp x y) of \where
+    ≤ → x ∷ y ∷ ys
+    ≥ → y ∷ insert x ys
 
 from-list : List Nat → Bag
 from-list [] = Ø
 from-list (x ∷ xs) = bag x ++ from-list xs 
 
-insert-sort : (xs : List Nat) → Sorted (from-list xs)
+insert-sort : {@0 xb : Bag} (xs : UnSorted xb) → Sorted xb
 insert-sort [] = []
 insert-sort (x ∷ xs) = insert x (insert-sort xs)
 
@@ -55,17 +55,66 @@ merge : {@0 xb : Bag} (xs : Sorted xb) {@0 yb : Bag} (ys : Sorted yb)
     → Sorted (xb ++ yb)
 merge [] ys = ys
 merge xs [] = xs
-merge (x ∷ xs) (y ∷ ys) with cmp x y
-... | ≤ = x ∷ merge xs (y ∷ ys)
-... | ≥ = y ∷ merge (x ∷ xs) ys
+merge (x ∷ xs) (y ∷ ys) = case (cmp x y) of \where
+    ≤ → x ∷ merge xs (y ∷ ys)
+    ≥ → y ∷ merge (x ∷ xs) ys
+
+data Split : (@0 _ : Bag) → Set where
+    zero : Split Ø
+    one : (x : Nat) → Split (bag x)
+    two : {@0 xb yb : Bag} (xs : UnSorted xb) (ys : UnSorted yb) 
+        → Split (xb ++ yb)
+
+split : {@0 xb : Bag} (xs : UnSorted xb) → Split xb
+split [] = zero
+split (x ∷ []) = one x
+split (x ∷ y ∷ xys) = case (split xys) of \where
+    zero → two (x ∷ []) (y ∷ [])
+    (one z) → two (x ∷ z ∷ []) (y ∷ [])
+    (two l r) → two (x ∷ l) (y ∷ r)
+
+{-# TERMINATING #-}
+merge-sort : {@0 xb : Bag} (xs : UnSorted xb) → Sorted xb
+merge-sort xs = case (split xs) of \where
+    zero → []
+    (one x) → x ∷ []
+    (two l r) → merge (merge-sort l) (merge-sort r)
+
+-- take : Nat → List Nat → List Nat
+-- take zero xs = []
+-- take (suc n) [] = []
+-- take (suc n) (x ∷ xs) = x ∷ take n xs
+
+-- skip : Nat → List Nat → List Nat
+-- skip zero xs = xs
+-- skip (suc n) [] = []
+-- skip (suc n) (x ∷ xs) = skip n xs
+
+-- take-skip : (n : Nat) (xs : List Nat) → from-list (take n xs) ++ from-list (skip n xs) ≡ from-list xs
+-- take-skip zero xs = refl
+-- take-skip (suc n) [] = refl
+-- take-skip (suc n) (x ∷ xs) = cong (_++_ (bag x)) (take-skip n xs)
+
+-- {-# REWRITE take-skip #-}
+
+
+-- {-# TERMINATING #-}
+-- merge-sort : (xs : List Nat) → Sorted (from-list xs)
+-- merge-sort [] = []
+-- merge-sort (x ∷ []) = x ∷ []
+-- merge-sort xs = let half = half-len xs in
+--     merge (merge-sort (take half xs)) (merge-sort (skip half xs))
 
 test : (n : Nat) → Sorted _
 test n = n ∷ []
 
-data UnSorted : Bag → Set where
-    [] : UnSorted Ø
-    _∷_ : (x : Nat) {@0 xb : Bag} → UnSorted xb 
-        → UnSorted (bag x ++ xb)
+
+
+-- turbofish
+infixr 5 _∷<_>_
+pattern _∷<_>_ x xb xs = _∷_ x {xb} xs
+
+
 
 postulate
     where-x : (x : Nat)
@@ -80,28 +129,28 @@ postulate
 
     left-rule : (x : Nat)
               → (P : {@0 xb : Bag} → UnSorted (bag x ++ xb) → Set)
-              → (left : {@0 yb : Bag} (ys : UnSorted yb) → P {yb} (x ∷ ys))
+              → (left : {@0 yb : Bag} (ys : UnSorted yb) → P (x ∷ ys))
               → (right : (y : Nat) 
                        → {@0 yb : Bag} (ys : UnSorted (bag x ++ yb)) 
                        → P {yb} ys
-                       → P {bag y ++ yb} (y ∷ ys))
+                       → P (y ∷ ys))
               → {@0 yb : Bag} (ys : UnSorted yb)
-              → where-x x _ left right {yb} (x ∷ ys) ≡ left ys
+              → where-x x _ left right (x ∷ ys) ≡ left ys
     
     -- this actually should check that left rule does not apply first
     -- in order to preserve confluence
     right-rule : (x : Nat)
                → (P : {@0 xb : Bag} → UnSorted (bag x ++ xb) → Set)
-               → (left : {@0 yb : Bag} (ys : UnSorted yb) → P {yb} (x ∷ ys))
+               → (left : {@0 yb : Bag} (ys : UnSorted yb) → P (x ∷ ys))
                → (right : (y : Nat) 
                         → {@0 yb : Bag} (ys : UnSorted (bag x ++ yb)) 
                         → P {yb} ys
-                        → P {bag y ++ yb} (y ∷ ys))
+                        → P (y ∷ ys))
                → (y : Nat)
                → {@0 yb : Bag} (ys : UnSorted (bag x ++ yb)) 
-               → where-x x _ left right {bag y ++ yb} (y ∷ ys) ≡ right y {yb} ys (where-x x _ left right ys)
+               → where-x x _ left right (y ∷ ys) ≡ right y {yb} ys (where-x x _ left right ys)
 
-{-# REWRITE left-rule right-rule #-}
+-- {-# REWRITE left-rule right-rule #-}
 
 -- data ⊥ : Set where
 
@@ -156,4 +205,4 @@ postulate
 --     left : A → Sum A B
 --     right : B → Sum A B
 --     -- comm : Sum A B ≡ Sum B A
---     -- assoc : Sum A (Sum B C) ≡ Sum (Sum A B) C     
+--     -- assoc : Sum A (Sum B C) ≡ Sum (Sum A B) C       

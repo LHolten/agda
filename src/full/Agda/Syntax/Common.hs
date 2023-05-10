@@ -1658,7 +1658,10 @@ data ArgInfo = ArgInfo
   , argInfoAnnotation    :: Annotation
     -- ^ Sometimes we want a different kind of binder/pi-type, without it
     --   supporting any of the @Modality@ interface.
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Show)
+
+instance Ord ArgInfo where
+  compare = compare `on` (argInfoHiding &&& argInfoModality &&& argInfoAnnotation)
 
 instance HasRange ArgInfo where
   getRange (ArgInfo h m o _fv a) = getRange (h, m, o, a)

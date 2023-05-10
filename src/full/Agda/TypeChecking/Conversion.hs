@@ -578,12 +578,17 @@ compareAtom cmp t m n =
                 m <- normalise m
                 n <- normalise n
                 SynEq.checkSyntacticEquality m n (\_ _ -> return ()) $ \_ _ -> do
+                let blocker = unblockOnEither (unblockOnAnyMetaIn m) (unblockOnAnyMetaIn n) 
                 reportSDoc "commassoc" 20 $ vcat 
                     [ "sides not yet equal"
-                    , prettyTCM m
-                    , prettyTCM n
+                    , pretty m
+                    , pretty n
+                    , "blocker" <+> pretty blocker
                     ]
-                patternViolation alwaysUnblock
+                if blocker == neverUnblock then
+                  notEqual
+                else
+                  patternViolation blocker
               else do
                 -- 3c. Oh no, we actually have to work and compare the eliminations!
                 a <- computeElimHeadType f es es'

@@ -29,6 +29,7 @@ import Control.Monad ( (>=>), void )
 
 import Data.Maybe
 import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.Foldable
@@ -671,9 +672,13 @@ normalisePlus v = reduce' v >>= \case
       reportSDoc "commassoc" 30 $
         "before reducing further" <+> prettyTCM args
       args <- mapM slowNormaliseArgs args
+      args <- instantiateFull args
       reportSDoc "commassoc" 30 $
         "after reducing further" <+> prettyTCM args
-      buildTerm f $ Bag.toList $ Bag.fromList args
+      let term = List.sort args
+      reportSDoc "commassoc" 30 $
+        "after sorting" <+> text (show term)
+      buildTerm f $ term
     else slowNormaliseArgs v
   v -> slowNormaliseArgs v
   
