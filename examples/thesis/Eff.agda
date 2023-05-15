@@ -11,6 +11,7 @@ open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
 open import Agda.Builtin.Reflection
 open import PlusComm1
+open import Cast
 -- open import Agda.Builtin.Cubical.Path
 
 data Eff : Set where
@@ -32,19 +33,27 @@ record Monoid (A : Set) : Set where
     _<>_   : A → A → A
 open Monoid {{...}}
 
+infixl 20 _&&'_
+_&&'_ : Bool → Bool → Bool
+true &&' x = x
+false &&' _ = false
+
+Cond : Set
+Cond = List Eff → Bool
+
 infixl 20 _&&_
-_&&_ : Bool → Bool → Bool
-true && x = x
-false && _ = false
+_&&_ : Cond → Cond → Cond
+p && q = λ x → (p x) &&' (q x)
 
 postulate
-    x&&true : ∀ {x} → x && true ≡ x
-    &&false : ∀ {x} → x && false ≡ false
-    &&-comm : ∀ (xs ys : Bool) → xs && ys ≡ ys && xs
-    &&-assoc : ∀ (xs ys zs : Bool) → (xs && ys) && zs ≡ xs && (ys && zs)
+    x&&'true : ∀ {x} → x &&' true ≡ x
+    &&'false : ∀ {x} → x &&' false ≡ false
+    x&&'x : ∀ {x} → x &&' x ≡ x
+    &&'-comm : ∀ (xs ys : Bool) → xs &&' ys ≡ ys &&' xs
+    &&'-assoc : ∀ (xs ys zs : Bool) → (xs &&' ys) &&' zs ≡ xs &&' (ys &&' zs)
 
-{-# REWRITE x&&true &&false #-}
-{-# COMMASSOC &&-comm #-}
+{-# REWRITE x&&'true &&'false x&&'x #-}
+{-# COMMASSOC &&'-comm #-}
 
 
 _++_ : {A : Set} → List A → List A → List A
@@ -67,6 +76,9 @@ data WithEff : ∀ {L : List Eff} (v : Bool) (O : Set) → Set₁ where
 
 _>>_ : ∀ {L v O} → WithEff {L} v ⊤ → WithEff {L} v O → WithEff {L} v O
 left >> right = left >>= λ tt → right
+
+WithEff' : (c : Cond) (O : Set) → Set₁
+WithEff' c O = {xs : List Eff} → WithEff {xs} (c xs) O
 
 raise : ∀ {B v L O} → WithEff {L} true O → WithEff {B ++ L} v O
 raise {[]} {false} s = fail
@@ -92,16 +104,16 @@ eff-idx here = true
 eff-idx (there i) = eff-idx i
 eff-idx nvm = false
 
-eff : ∀ {L : List Eff} (E : Eff) → Bool
-eff {xs} E = eff-idx (idx E xs)
+eff : (E : Eff) → Cond
+eff E = λ xs → eff-idx (idx E xs)
 
-emit-idx : ∀ {v x xs} → (i : Index x xs) → get-eff x → WithEff {xs} (v && eff-idx i) ⊤
+emit-idx : {v : Bool} → ∀ {x xs} → (i : Index x xs) → get-eff x → WithEff {xs} (v &&' eff-idx i) ⊤
 emit-idx here e = emit e
 emit-idx {v} (there i) e = inc (emit-idx {v} i e)
 emit-idx nvm e = fail
 
-smart-emit : ∀ {E v L} → get-eff E → WithEff {L} (v && eff {L} E) ⊤
-smart-emit {E} {v} {xs} e = emit-idx {v} (idx E xs) e
+smart-emit : ∀ {E v xs} → {{v &&' eff E xs ≡ v}} → get-eff E → WithEff {xs} v ⊤
+smart-emit {E} {v} {xs} {{p}} e = cast (λ x → WithEff x ⊤) p (emit-idx {v} (idx E xs) e)
 
 
 data Handle (O E : Set) : Set where
@@ -128,11 +140,11 @@ instance
   mempty {{ListMonoid}} = []
   _<>_   {{ListMonoid}} xs ys = xs ++ ys
 
-test : ∀ {L} → WithEff {L} (eff {L} Nats && eff {L} Bools) ⊤
-test {L} = do
-    smart-emit {Nats} {eff {L} Bools} (10 ∷ [])
-    smart-emit {Bools} {eff {L} Nats} (true ∷ [])
-    smart-emit {Nats} {eff {L} Bools} (42 ∷ [])
+test : WithEff' (eff Nats && eff Bools) ⊤
+test = do
+    smart-emit {Nats} (10 ∷ [])
+    smart-emit {Bools} (true ∷ [])
+    smart-emit {Nats} (42 ∷ [])
 
 main : List Nat
 main = eval do
@@ -141,7 +153,7 @@ main = eval do
         smart-pure nats
     smart-pure nats
 
-main1 : ∀ {L} → WithEff {L} (eff {L} Bools) (List Nat)
+main1 : WithEff' (eff Bools) (List Nat)
 main1 = do
     (tt , nats) ← handle {Nats} test
     smart-pure nats
