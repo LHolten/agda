@@ -4,27 +4,28 @@ open import Agda.Builtin.Nat
 open import PlusComm1
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
+open import Agda.Builtin.Maybe
 open import PBag
 -- import Bag1
 
 -- {-# COMMASSOC +comm #-}
-{-# COMMASSOC ∪-comm #-}
--- {-# COMMASSOC Bag1.∪-comm #-}
+{-# COMMASSOC ⊔-comm #-}
+-- {-# COMMASSOC Bag1.⊔-comm #-}
 
 infixr 5 _∷_
 data Sorted : @0 Bag → Set where
     [] : Sorted Ø
     _∷_ : (x : Nat) {@0 xb : Bag} → Sorted (x ↑ xb) 
-        → Sorted (bag x ∪ x ↑ xb)
+        → Sorted (bag x ⊔ x ↑ xb)
 
 data UnSorted : @0 Bag → Set where
     [] : UnSorted Ø
     _∷_ : (x : Nat) {@0 xb : Bag} → UnSorted xb 
-        → UnSorted (bag x ∪ xb)
+        → UnSorted (bag x ⊔ xb)
 
 
 insert : (x : Nat) {@0 yb : Bag} (ys : Sorted yb) 
-    → Sorted (bag x ∪ yb)
+    → Sorted (bag x ⊔ yb)
 insert x [] = x ∷ []
 insert x (y ∷ ys) = case (cmp x y) of \where
     < → x ∷ y ∷ ys
@@ -33,7 +34,7 @@ insert x (y ∷ ys) = case (cmp x y) of \where
 
 from-list : List Nat → Bag
 from-list [] = Ø
-from-list (x ∷ xs) = bag x ∪ from-list xs 
+from-list (x ∷ xs) = bag x ⊔ from-list xs 
 
 insert-sort : {@0 xb : Bag} (xs : UnSorted xb) → Sorted xb
 insert-sort [] = []
@@ -41,7 +42,7 @@ insert-sort (x ∷ xs) = insert x (insert-sort xs)
 
 {-# TERMINATING #-}
 merge : {@0 xb : Bag} (xs : Sorted xb) {@0 yb : Bag} (ys : Sorted yb)
-    → Sorted (xb ∪ yb)
+    → Sorted (xb ⊔ yb)
 merge [] ys = ys
 merge xs [] = xs
 merge (x ∷ xs) (y ∷ ys) = case (cmp x y) of \where
@@ -53,7 +54,7 @@ data Split : @0 Bag → Set where
     zero : Split Ø
     one : (x : Nat) → Split (bag x)
     two : {@0 xb yb : Bag} (xs : UnSorted xb) (ys : UnSorted yb) 
-        → Split (xb ∪ yb)
+        → Split (xb ⊔ yb)
 
 split : {@0 xb : Bag} (xs : UnSorted xb) → Split xb
 split [] = zero
@@ -88,14 +89,14 @@ case_to_of_ {l₁} {l₂} {A} c B r = case_of_ {l₁} {l₂} {A} {B} c r
 
 
 -- -- find the index of a Nat in an unsorted list
--- find : (x : Nat) {xb : Bag} → UnSorted (bag x ∪ xb) → Nat
+-- find : (x : Nat) {xb : Bag} → UnSorted (bag x ⊔ xb) → Nat
 -- find x {xb} xs = where-x x (λ _ → Nat)
 --     (λ ys → zero)
 --     (λ y ys res → suc res)
 --     {xb} xs
 
 -- -- pos : Nat
--- -- pos = find 3 {bag 0 ∪ bag 2} (2 ∷ 0 ∷ 3 ∷ [])
+-- -- pos = find 3 {bag 0 ⊔ bag 2} (2 ∷ 0 ∷ 3 ∷ [])
 
 data CmpEq (x y : Nat) : Set where
     == : x ≡ y → CmpEq x y
@@ -114,61 +115,40 @@ data Index (x : Nat) : {@0 b : Bag} → UnSorted b → Set where
     here : {@0 b : Bag} {ys : UnSorted b} → Index x (x ∷ ys)
     there : ∀ {y} {@0 b : Bag} {xs : UnSorted b} → Index x xs → Index x (y ∷ xs)
 
-find : (x : Nat) {xb : Bag} → (xs : UnSorted (bag x ∪ xb)) → Index x xs 
+find : (x : Nat) {xb : Bag} → (xs : UnSorted (bag x ⊔ xb)) → Index x xs 
 find x {xb} ys = find' x {xb} ys refl
     where
-    find' : (x : Nat) {@0 xb yb : Bag} → (xs : UnSorted yb) → (yb ≡ bag x ∪ xb) → Index x xs 
+    find' : (x : Nat) {@0 xb yb : Bag} → (xs : UnSorted yb) → (yb ≡ bag x ⊔ xb) → Index x xs 
     find' x {xb} [] p = bag≡Ø {x} {xb} p
     find' x {xb} (y ∷< yb > ys) q = case (cmp-eq x y) of \where
         (== refl) → here
-        (!= p) → there (find' x {xb ∩ yb} ys (∪-step {xb} p q))
+        (!= p) → there (find' x {xb ∩ yb} ys (⊔-step {xb} p q))
+
+record List1 : Set where
+    inductive
+    constructor _∷_
+    field
+        head : Nat
+        tail : Maybe List1
+open List1
+
+data IdkList : Maybe List1 → Set where
+    ?∷_ : ∀ {xs} → IdkList (tail xs) → IdkList (just xs)
+    _∷_ : ∀ x {xs} → IdkList xs → IdkList (just (x ∷ xs))
+    * : ∀ {xs} → IdkList xs
+
+data Index1 (x : Nat) : Maybe List1 → Set where
+    ?∷_ : ∀ {xs} → Index1 x (tail xs) → Index1 x (just xs)
+    x∷* : ∀ {xs} → head xs ≡ x → Index1 x (just xs)
 
 
-postulate
-    _∈_ : Nat → Bag → Set
-    -- ∈-ind : P
-    rule2 : ∀ x yb → x ∈ (bag x ∪ yb)
-    rule3 : ∀ x y xb → x ∈ xb → x ∈ (bag y ∪ xb)
-    rule4 : ∀ x y xb → (x ≡ y → ⊥) → x ∈ (bag y ∪ xb) → x ∈ xb
-    rule1 : ∀ x y yb → bag x ≡ bag y ∪ yb → yb ≡ Ø
-
-data NotIn (x : Nat) : @0 Bag → Set where
-    empty : NotIn x [zero]
-    andn : (y : Nat) → (x ≡ y → ⊥) → {yb : Bag} → NotIn x yb
-        → NotIn x (bag y ∪ yb)
-
-data Pos1 (x : Nat) : (@0 xb : Bag) → UnSorted (bag x ∪ xb) → Set where
-    here : {@0 xb : Bag} {xs : UnSorted xb} → Pos1 x xb (x ∷ xs)
-    next : {y : Nat} {@0 xb : Bag} {xs : UnSorted (bag x ∪ xb)}
-        → Pos1 x xb xs → Pos1 x (bag y ∪ xb) (y ∷ xs)
-
-data Pos (x : Nat) : {@0 xb : Bag} → UnSorted xb → Set where
-    nowhere : {@0 xb : Bag} {xs : UnSorted xb} → (x ∈ xb → ⊥) 
-        → Pos x xs
-    at : {@0 xb : Bag} {xs : UnSorted (bag x ∪ xb)} → Pos1 x xb xs 
-        → Pos x xs
-
-data IsIn (x : Nat) (@0 xb : Bag) : Set where
-    just : bag x ≡ xb → IsIn x xb
-    and : ∀ y {yb} → IsIn x yb → bag y ∪ yb ≡ xb → IsIn x xb
-
--- not-in : (x y : Nat) (yb : Bag) → (IsIn x yb → ⊥) → (x ≡ y → ⊥) → IsIn x (bag y ∪ yb) → ⊥
--- not-in x y yb pb p (just x₁) = {!   !}
--- not-in x y yb pb p (and y₁ q x₁) = {!   !}
-
--- pos-suc : {y x : Nat} {@0 xb : Bag} {xs : UnSorted xb} → Pos x xs → Pos x (y ∷ xs)
--- pos-suc {y} (nowhere p) = nowhere \where
---     proof → {!  !}
--- pos-suc (at n) = at (next n)
-
--- find : (x : Nat) {@0 xb : Bag} → (xs : UnSorted xb) → Pos x xs
--- find x [] = nowhere
--- find x (y ∷ ys) = case (cmp x y) of \where
---     == → at here
---     _ → pos-suc (find x ys)
-
--- find1 : (x : Nat) {@0 xb : Bag} → (xs : UnSorted (bag x ∪ xb)) → Pos1 x xb xs
--- find1 x ys = {!  !}
+_++_ : ∀ {xs} → IdkList xs → IdkList xs → IdkList xs
+xs ++ * = xs
+* ++ ys = ys
+(x ∷ xs) ++ (?∷ ys) = x ∷ (xs ++ ys)
+(?∷ xs) ++ (y ∷ ys) = y ∷ (xs ++ ys)
+(?∷ xs) ++ (?∷ ys) = ?∷ (xs ++ ys)
+(z ∷ xs) ++ (z ∷ ys) = z ∷ (xs ++ ys)
 
 -- -- test : Sorted _
 -- -- test = 1 ∷ 3 ∷ 4 ∷ 4 ∷ []

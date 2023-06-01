@@ -30,28 +30,29 @@ abstract
         (<{d}) → <{d}
         (>{d}) → >{d}
 
-infixl 20 _∪_
+infixl 20 _⊔_
 infixr 21 _↑_
 infixr 22 _∩_
 postulate
     Bag : Set
     Ø : Bag
     [zero] : Bag
-    _∪_ : Bag → Bag → Bag
+    -- disjoin union: takes the sum of the number of elements in each bag
+    _⊔_ : Bag → Bag → Bag
     _↑_ : Nat → Bag → Bag
 
-    Ø∪xs : (xs : Bag) → Ø ∪ xs ≡ xs
-    xs∪Ø : (xs : Bag) → xs ∪ Ø ≡ xs
+    Ø⊔xs : (xs : Bag) → Ø ⊔ xs ≡ xs
+    xs⊔Ø : (xs : Bag) → xs ⊔ Ø ≡ xs
     x↑Ø : (x : Nat) → x ↑ Ø ≡ Ø
 
-    ∪-comm : (xs ys : Bag) → xs ∪ ys ≡ ys ∪ xs
-    ∪-assoc : (xs ys zs : Bag) → (xs ∪ ys) ∪ zs ≡ xs ∪ (ys ∪ zs)
+    ⊔-comm : (xs ys : Bag) → xs ⊔ ys ≡ ys ⊔ xs
+    ⊔-assoc : (xs ys zs : Bag) → (xs ⊔ ys) ⊔ zs ≡ xs ⊔ (ys ⊔ zs)
     
-    ↑-comb : (x : Nat) (xs ys : Bag) → (x ↑ xs) ∪ (x ↑ ys) ≡ x ↑ (xs ∪ ys)
+    ↑-comb : (x : Nat) (xs ys : Bag) → (x ↑ xs) ⊔ (x ↑ ys) ≡ x ↑ (xs ⊔ ys)
     ↑-dist : (x y : Nat) (xs : Bag) → (x ⊕ y) ↑ xs ≡ x ↑ (y ↑ xs)
 
 
-{-# REWRITE Ø∪xs xs∪Ø x↑Ø ↑-comb ↑-dist #-}
+{-# REWRITE Ø⊔xs xs⊔Ø x↑Ø ↑-comb ↑-dist #-}
 {-# COMMASSOC +comm #-}
 
 bag : Nat → Bag
@@ -60,23 +61,33 @@ bag x = x ↑ [zero]
 data ⊥ : Set where
 
 postulate
-    bag≡Ø : ∀ {x} {@0 xs : Bag} {A : Set} → Ø ≡ bag x ∪ xs → A
-    -- ∪-inj : ∀ {xs ys} → xs ∪ ys ≡ xs → ys ≡ Ø
-    ∪-inj : ∀ a b c → b ∪ a ≡ c ∪ a → b ≡ c
-    bag-inj : ∀ x y → bag x ≡ bag y → x ≡ y
+    bag≡Ø : ∀ {x} {@0 xs : Bag} {A : Set} → Ø ≡ bag x ⊔ xs → A
+    -- ⊔-inj : ∀ {xs ys} → xs ⊔ ys ≡ xs → ys ≡ Ø
+    -- ⊔-inj : ∀ a b c → b ⊔ a ≡ c ⊔ a → b ≡ c
+    -- bag-inj : ∀ x y → bag x ≡ bag y → x ≡ y
 
+    -- instersection: takes the minimum number of each element in both bags
     _∩_ : Bag → Bag → Bag
-    ∩-comb : ∀ xs ys zs → zs ∪ (xs ∩ ys) ≡ (xs ∪ zs) ∩ (ys ∪ zs)
     ∩-Ø : ∀ xs → xs ∩ Ø ≡ Ø
     ∩-comm : (xs ys : Bag) → xs ∩ ys ≡ ys ∩ xs
     ∩-assoc : (xs ys zs : Bag) → (xs ∩ ys) ∩ zs ≡ xs ∩ (ys ∩ zs)
 
-    -- ∪-stuff : a ∩ c ≡ Ø → a ∪ b ≡ c ∪ d → d ≡ a ∪ (b ∩ d)
-    ∪-step : {@0 b d : Bag} → ∀ {a c} → (a ≡ c → ⊥) → bag c ∪ d ≡ bag a ∪ b → d ≡ bag a ∪ (b ∩ d)
+
+    -- ∩-dist : ∀ x xs ys → x ⊔ (xs ∩ ys) ≡ (x ⊔ xs) ∩ (x ⊔ ys)
+    x∩y : ∀ x y → (x ≡ y → ⊥) → bag x ∩ bag y ≡ Ø
+
+    -- ⊔-stuff : ∀ x a b c d → x ≡ a ⊔ b → x ≡ c ⊔ d → x ≡ (a ∪ c) ⊔ (b ∩ d)
+    ⊔-step : {@0 b d : Bag} → ∀ {a c} → (a ≡ c → ⊥) → bag c ⊔ d ≡ bag a ⊔ b → d ≡ bag a ⊔ (b ∩ d)
+
+    -- union: takes the maximum number of each element in both bags
+    _∪_ : Bag → Bag → Bag
+    -- x∪y : ∀ x y → (x ∪ y) ⊓ (x ∩ y) ≡ x ⊔ y
+    -- bag x ∪ bag y ≡ bag x ⊔ (bag y - bag x)
+
     
     
 -- {-# REWRITE ∩-comb ∩-Ø #-}
-{-# COMMASSOC ∪-comm #-}
+{-# COMMASSOC ⊔-comm #-}
 {-# COMMASSOC ∩-comm #-}
 
 -- data WithEff : ∀ (b : Bag) {xs : UnSorted b} (O : Set) → Set₁ where
@@ -85,11 +96,11 @@ postulate
 -- handle = {!   !}
 
 -- data Element : Bag → Set where
---     just : (x : Nat) → {xs : Bag} → Element (bag x ∪ xs)
+--     just : (x : Nat) → {xs : Bag} → Element (bag x ⊔ xs)
 
--- first : ∀ {x xs ys} → (bag x ∪ xs ≡ ys) → UnSorted ys → Element ys
+-- first : ∀ {x xs ys} → (bag x ⊔ xs ≡ ys) → UnSorted ys → Element ys
 -- first {x} {xs} p [] = case (bag≡Ø {x} {xs}) p of λ {()}
 -- first p (_∷_ x {xb} ys) = just x {xb}
 
--- first' : ∀ {x xs} → UnSorted (bag x ∪ xs) → Element (bag x ∪ xs)
+-- first' : ∀ {x xs} → UnSorted (bag x ⊔ xs) → Element (bag x ⊔ xs)
 -- first' {x} {xs} list = first {x} {xs} refl list  
