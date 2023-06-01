@@ -38,23 +38,38 @@ _&&'_ : Bool → Bool → Bool
 true &&' x = x
 false &&' _ = false
 
+x&&'true : ∀ x → x &&' true ≡ x
+x&&'true false = refl
+x&&'true true = refl
+
+&&'false : ∀ x → x &&' false ≡ false
+&&'false false = refl
+&&'false true = refl
+
+x&&'x : ∀ x → x &&' x ≡ x
+x&&'x false = refl
+x&&'x true = refl
+
+{-# REWRITE x&&'true &&'false x&&'x #-}
+
+&&'-comm : ∀ (x y : Bool) → x &&' y ≡ y &&' x
+&&'-comm false y = refl
+&&'-comm true y = refl
+
+&&'-assoc : ∀ (x y z : Bool) → (x &&' y) &&' z ≡ x &&' (y &&' z)
+&&'-assoc false y z = refl
+&&'-assoc x false z = refl
+&&'-assoc x y false = refl
+&&'-assoc true true true = refl
+
+{-# COMMASSOC &&'-comm #-}
+
 Cond : Set
 Cond = List Eff → Bool
 
 infixl 20 _&&_
 _&&_ : Cond → Cond → Cond
 p && q = λ x → (p x) &&' (q x)
-
-postulate
-    x&&'true : ∀ {x} → x &&' true ≡ x
-    &&'false : ∀ {x} → x &&' false ≡ false
-    x&&'x : ∀ {x} → x &&' x ≡ x
-    &&'-comm : ∀ (xs ys : Bool) → xs &&' ys ≡ ys &&' xs
-    &&'-assoc : ∀ (xs ys zs : Bool) → (xs &&' ys) &&' zs ≡ xs &&' (ys &&' zs)
-
-{-# REWRITE x&&'true &&'false x&&'x #-}
-{-# COMMASSOC &&'-comm #-}
-
 
 _++_ : {A : Set} → List A → List A → List A
 [] ++ r = r
