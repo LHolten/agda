@@ -23,6 +23,7 @@ module Agda.TypeChecking.Reduce
  -- Normalization
  , Normalise, normalise', normalise
  , slowNormaliseArgs
+ , listCommAssocArgs, buildCommAssocTerm
  ) where
 
 import Control.Monad ( (>=>), void )
@@ -558,7 +559,7 @@ slowReduceTerm v = do
         if commAssoc then do
           args <- listArgs f (Def f es)
           args <- insertAll f args
-          res <- buildTerm f (ignoreBlocking args)
+          res <- buildCommAssocTerm f (ignoreBlocking args)
           if (getBlocker args) == neverUnblock then
             return $ notBlocked res
           else 
@@ -615,7 +616,7 @@ slowReduceTerm v = do
               return $ concat [list1, list2]
             _ -> __IMPOSSIBLE__
           _ -> return [v]
-        
+
       insertAll :: QName -> [Term] -> ReduceM (Blocked [Term])
       insertAll plus [] = return $ notBlocked []
       insertAll plus (x : xs) = do
@@ -652,14 +653,6 @@ slowReduceTerm v = do
         -- case ignoreBlocking newTerm of
         --       Def f _ | f == plus -> return $ notBlocked Nothing
         --       v -> return $ blockedOn (getBlocker newTerm) (Just v)
-      
-      buildTerm :: QName -> [Term] -> ReduceM (Term)
-      buildTerm _ [] = __IMPOSSIBLE__
-      buildTerm _ [t] = return t
-      buildTerm plus (x : xs) = do 
-        lhs <- buildTerm plus xs
-        return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
-
 
 -- This could be made more efficient with merge sort
 normalisePlus :: Term -> ReduceM Term
@@ -667,7 +660,7 @@ normalisePlus v = reduce' v >>= \case
   v@(Def f es) -> do
     commAssoc <- getCommAssocFor f
     if commAssoc then do
-      args <- listArgs f v
+      args <- listCommAssocArgs f v
       -- each arg has been reduced, but we need to normalize the args of each arg
       reportSDoc "commassoc" 30 $
         "before reducing further" <+> prettyTCM args
@@ -678,28 +671,27 @@ normalisePlus v = reduce' v >>= \case
       let term = List.sort args
       reportSDoc "commassoc" 30 $
         "after sorting" <+> text (show term)
-      buildTerm f $ term
+      buildCommAssocTerm f $ term
     else slowNormaliseArgs v
   v -> slowNormaliseArgs v
-  
-  where
-    listArgs :: QName -> Term -> ReduceM [Term]
-    listArgs plus v = case v of
-      Def f es | f == plus -> do
-        case allApplyElims es of
-          Just [a, b] -> do
-            list1 <- listArgs plus (unArg a)
-            list2 <- listArgs plus (unArg b)
-            return $ concat [list1, list2]
-          _ -> __IMPOSSIBLE__
-      v -> return [v]
 
-    buildTerm :: QName -> [Term] -> ReduceM Term
-    buildTerm _ [] = __IMPOSSIBLE__
-    buildTerm _ [t] = return t
-    buildTerm plus (x : xs) = do 
-      lhs <- buildTerm plus xs
-      return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+listCommAssocArgs :: (MonadReduce m) => QName -> Term -> m [Term]
+listCommAssocArgs plus v = case v of
+  Def f es | f == plus -> do
+    case allApplyElims es of
+      Just [a, b] -> do
+        list1 <- listCommAssocArgs plus (unArg a)
+        list2 <- listCommAssocArgs plus (unArg b)
+        return $ concat [list1, list2]
+      _ -> __IMPOSSIBLE__
+  v -> return [v]
+
+buildCommAssocTerm :: (MonadReduce m) => QName -> [Term] -> m Term
+buildCommAssocTerm _ [] = __IMPOSSIBLE__
+buildCommAssocTerm _ [t] = return t
+buildCommAssocTerm plus (x : xs) = do 
+  lhs <- buildCommAssocTerm plus xs
+  return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
 
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion

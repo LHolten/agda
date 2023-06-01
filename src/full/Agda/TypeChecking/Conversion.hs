@@ -16,6 +16,8 @@ import qualified Data.List   as List
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Set    as Set
+import qualified Data.MultiSet as MultiSet
+import Data.MultiSet (MultiSet)
 
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
@@ -575,10 +577,30 @@ compareAtom cmp t m n =
               -- if comm/assoc we need to normalise the whole term
               commAssoc <- getCommAssocFor f
               if commAssoc then do
+                -- Both sides are in WHNF, so there can not be any interaction between arguments
+                -- Thus we are allowed to remove equal arguments
                 m <- normalise m
                 n <- normalise n
+                -- mArgs <- MultiSet.fromList <$> listCommAssocArgs f m
+                -- nArgs <- MultiSet.fromList <$> listCommAssocArgs f n
+                -- let mnArgs :: MultiSet Term
+                --     mnArgs = MultiSet.intersection mArgs nArgs
+                --     mArgs = MultiSet.difference mArgs mnArgs
+                --     nArgs = MultiSet.difference nArgs mnArgs
+                -- case (MultiSet.toList mArgs, MultiSet.toList nArgs) of
+                --   ([], []) -> return ()
+                --   (m, []) -> notEqual -- identify element is not possible, because then we could never have WHNF
+                --   ([], n) -> notEqual
+                --   -- ([m], [n]) -> compareAtom cmp t m n
+                --   -- ([MetaV x es], n) | size n > 0 -> assign dir x es =<< buildCommAssocTerm f n
+                --   -- (m, [MetaV x es]) | size m > 0 -> assign rid x es =<< buildCommAssocTerm f m
+                --   -- (m, n) | size m == 1 || size n == 1 -> do
+                --   --           m <- buildCommAssocTerm f m
+                --   --           n <- buildCommAssocTerm f n
+                --   --           compareAtom cmp t m n
+                --   (m, n) -> do
                 SynEq.checkSyntacticEquality m n (\_ _ -> return ()) $ \_ _ -> do
-                let blocker = unblockOnEither (unblockOnAnyMetaIn m) (unblockOnAnyMetaIn n) 
+                let blocker = unblockOnAnyMetaIn [m, n] 
                 reportSDoc "commassoc" 20 $ vcat 
                     [ "sides not yet equal"
                     , pretty m

@@ -328,13 +328,11 @@ functionInverse = \case
     rewr <- mapMaybeM (checkPossible $ Def f es) rewr
     let m = joinHeadMaps $ map (\(h, rew) -> Map.singleton h [rew]) rewr
     res <- fromMaybeM __IMPOSSIBLE__ $ (instantiateVarHeads f es m)
-    return (Inv f es res)
-    -- return $ Inv f es m
-    -- return NoInv
-    -- maybe NoInv (Inv f es) <$> (traverse (checkOverapplication es) =<< instantiateVarHeads f es m)
+    res <- checkOverapplication es res
     -- NB: Invertible functions are never classified as
     --     projection-like, so this is fine, we are not
     --     missing parameters.  (Andreas, 2013-11-01)
+    return (Inv f es res)
   _ -> return NoInv
   where 
     getAllRulesFor :: (HasConstInfo m, MonadFresh NameId m) => QName -> m [RewriteRule]
@@ -397,11 +395,13 @@ useInjectivity dir blocker ty blk neu = locallyTC eInjectivityDepth succ $ do
         [ prettyTCM blk, prettyTCM cmp, prettyTCM neu, prettyTCM ty]
       whenProfile Profile.Conversion $ tick "compare by reduction: injectivity"
       let canReduceToSelf = Map.member (ConsHead f) hdMap || Map.member UnknownHead hdMap
+      commAssoc <- getCommAssocFor f
       case neu of
         -- f us == f vs  <=>  us == vs
         -- Crucially, this relies on `f vs` being neutral and only works
         -- if `f` is not a possible head for `f us`.
-        Def f' neuArgs | f == f', not canReduceToSelf -> do
+        -- f can also not be commAssoc, because then we don't know the argument order
+        Def f' neuArgs | f == f', not canReduceToSelf, not commAssoc -> do
           fTy <- defType <$> getConstInfo f
           reportSDoc "tc.inj.use" 20 $ vcat
             [ fsep (pwords "comparing application of injective function" ++ [prettyTCM f] ++
@@ -410,10 +410,6 @@ useInjectivity dir blocker ty blk neu = locallyTC eInjectivityDepth succ $ do
             , nest 2 $ fsep $ punctuate comma $ map prettyTCM neuArgs
             , nest 2 $ "and type" <+> prettyTCM fTy
             ]
-          -- we want to make sure f is not commassoc, because that case is complicated
-          -- commAssoc <- getCommAssocFor f
-          -- when commAssoc $ fallback
-          -- when commAssoc $ patternViolation alwaysUnblock
           fs  <- getForcedArgs f
           pol <- getPolarity' cmp f
           reportSDoc "tc.inj.invert.success" 20 $ hsep ["Successful spine comparison of", prettyTCM f]
@@ -429,7 +425,7 @@ useInjectivity dir blocker ty blk neu = locallyTC eInjectivityDepth succ $ do
             reportSDoc "tc.inj.use" 20 $ fsep $
               pwords "no head symbol found for" ++ [prettyTCM neu] ++ pwords ", so not inverting"
             fallback
-          Just (ConsHead f') | f == f', canReduceToSelf -> do
+          Just (ConsHead f') | f == f' -> do
             reportSDoc "tc.inj.use" 20 $ fsep $
               pwords "head symbol" ++ [prettyTCM f'] ++ pwords "can reduce to self, so not inverting"
             fallback
@@ -524,14 +520,15 @@ mostGeneralRule (rew : rest) notBest = do
       ps = rewPats rew
       gamma = rewContext rew
   (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
-  res <- mapM (\RewriteRule{rewPats = pats} -> do
+  -- TODO: if f is commassoc, we need to try everywhere
+  res <- allM (rest ++ notBest) (\RewriteRule{rewPats = pats} -> do
       margs::[Elim' Term] <- mapM nlPatToTerm pats
       res <- nonLinMatch gamma (t, (\es -> Def f es)) ps margs
       case res of
         Left _ -> return False
         Right _ -> return True
-    ) $ rest ++ notBest
-  if all (\x -> x) res then
+    )
+  if res then
     return $ Just rew
   else
     mostGeneralRule rest (rew : notBest)
