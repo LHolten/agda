@@ -1,4 +1,4 @@
-{-# OPTIONS --rewriting --no-fast-reduce -v tc.inj.use:20 #-}
+{-# OPTIONS --rewriting --no-fast-reduce -v commassoc:20 #-}
 
 open import Agda.Builtin.Nat
 open import Agda.Builtin.Equality
@@ -43,6 +43,10 @@ data Singleton : Nat → Set where
 
 -- inj1c : (b : Nat) → Singleton (suc b)
 -- inj1c b = just (_ + b)
+
+-- ????????????
+inj1d : (b : Nat) → Singleton (b)
+inj1d b = just (_ + b)
 
 inj1v : (a : Nat) → Singleton (suc a)
 inj1v a = just (_ + 1)
@@ -92,20 +96,17 @@ inj-min3 a b = just (_ ⊓ b)
 -- min-x-d zero d = refl
 -- min-x-d (suc x) d = cong suc (min-x-d x d)
 
--- min-comm : (m n : Nat) → m ⊓ n ≡ n ⊓ m
--- min-comm zero n = refl
--- min-comm (suc m) zero = refl
--- min-comm (suc m) (suc n) = cong suc (min-comm m n)
+min-comm : (m n : Nat) → m ⊓ n ≡ n ⊓ m
+min-comm zero n = refl
+min-comm (suc m) zero = refl
+min-comm (suc m) (suc n) rewrite min-comm m n = refl
 
 -- -- TODO: prove associative
 
--- {-# COMMASSOC min-comm #-}
+{-# COMMASSOC min-comm #-}
 
--- min-test : (m n o : Nat) → suc m ⊓ n ⊓ suc o ≡ n ⊓ suc (m ⊓ o)
--- min-test m n o = refl
-
--- nat-as-set : Nat → Set
--- nat-as-set x = x
+min-test : (m n o : Nat) → suc m ⊓ n ⊓ suc o ≡ n ⊓ suc (m ⊓ o)
+min-test m n o = refl
 
 -- open import Agda.Primitive
 
@@ -122,27 +123,27 @@ inj-min3 a b = just (_ ⊓ b)
 
 -- VEC SWAP
 
--- data Vec (A : Set) : Nat → Set where
---     [] : Vec A zero
---     _∷_ : ∀ (x : A) (xs : Vec A n) → Vec A (suc n) 
+data Vec (A : Set) : Nat → Set where
+    [] : Vec A zero
+    _∷_ : ∀ (x : A) {n : Nat} (xs : Vec A n) → Vec A (suc n) 
 
--- infixr 5 _∷_
+infixr 5 _∷_
 
--- take : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A p
--- take zero xs = []
--- take (suc n) {o} (x ∷ xs) = x ∷ take n {o} xs
+take : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A p
+take zero xs = []
+take (suc n) {o} (x ∷ xs) = x ∷ take n {o} xs
 
--- skip : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A o
--- skip zero xs = xs
--- skip (suc n) (x ∷ xs) = skip n xs
+skip : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A o
+skip zero xs = xs
+skip (suc n) (x ∷ xs) = skip n xs
 
--- _++_ : ∀ {A} → Vec A p → Vec A o → Vec A (p + o)
+-- _++_ : ∀ {A} {p o : Nat} → Vec A p → Vec A o → Vec A (p + o)
 -- _++_ [] ys = ys
 -- _++_ (x ∷ xs) ys = x ∷ (xs ++ ys)
 
 -- infixr 4 _++_
 
--- swap : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A (o + p)
+-- swap : ∀ {A} (p : Nat) {o} → Vec A (p + o) → Vec A (p + o)
 -- swap p {o} xs = skip p {o} xs ++ take p {o} xs 
 
 -- swap_test1 : Vec Nat 4

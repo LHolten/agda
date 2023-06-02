@@ -558,7 +558,7 @@ slowReduceTerm v = do
         commAssoc <- getCommAssocFor f
         if commAssoc then do
           args <- listArgs f (Def f es)
-          args <- insertAll f args
+          args <- insertAll f args []
           res <- buildCommAssocTerm f (ignoreBlocking args)
           if (getBlocker args) == neverUnblock then
             return $ notBlocked res
@@ -617,12 +617,12 @@ slowReduceTerm v = do
             _ -> __IMPOSSIBLE__
           _ -> return [v]
 
-      insertAll :: QName -> [Term] -> ReduceM (Blocked [Term])
-      insertAll plus [] = return $ notBlocked []
-      insertAll plus (x : xs) = do
-        xs <- insertAll plus xs
-        res <- insertOne plus [] x (ignoreBlocking xs)
-        let blocker1 = getBlocker xs
+      insertAll :: QName -> [Term] -> [Term] -> ReduceM (Blocked [Term])
+      insertAll plus [] ys = return $ notBlocked ys
+      insertAll plus (x : xs) ys = do
+        ys <- insertOne plus [] x ys
+        res <- insertAll plus xs (ignoreBlocking ys)
+        let blocker1 = getBlocker ys
             blocker2 = getBlocker res
             blocker = unblockOnEither blocker1 blocker2
         return $ blockedOn blocker (ignoreBlocking res)
@@ -632,7 +632,7 @@ slowReduceTerm v = do
       insertOne plus xs x (y : ys) = do
         xy <- tryCombine plus x y
         case ignoreBlocking xy of
-          Just xy -> insertOne plus [] xy (xs ++ ys)
+          Just xy -> insertAll plus xy (xs ++ ys)
           Nothing -> do 
             res <- insertOne plus (y : xs) x ys
             let blocker1 = getBlocker xy
@@ -640,19 +640,14 @@ slowReduceTerm v = do
                 blocker = unblockOnEither blocker1 blocker2
             return $ blockedOn blocker (ignoreBlocking res)
 
-      tryCombine :: QName -> Term -> Term -> ReduceM (Blocked (Maybe Term))
+      tryCombine :: QName -> Term -> Term -> ReduceM (Blocked (Maybe [Term]))
       tryCombine plus x y = do
         res <- unfoldDefinitionStep False (Def plus []) plus [Apply $ defaultArg x, Apply $ defaultArg y]
         case res of
-          YesReduction _ v -> case v of
-            Def f _ | f == plus -> return $ notBlocked Nothing
-            v -> return $ notBlocked $ Just v
+          YesReduction _ v -> do
+            vs <- listArgs plus v
+            return $ notBlocked $ Just vs
           NoReduction v -> return $ blockedOn (getBlocker v) Nothing
-
-        -- newTerm <- unfoldDefinitionE False reduceB' (Def plus []) plus [Apply $ defaultArg x, Apply $ defaultArg y]
-        -- case ignoreBlocking newTerm of
-        --       Def f _ | f == plus -> return $ notBlocked Nothing
-        --       v -> return $ blockedOn (getBlocker newTerm) (Just v)
 
 -- This could be made more efficient with merge sort
 normalisePlus :: Term -> ReduceM Term
