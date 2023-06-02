@@ -426,6 +426,8 @@ useInjectivity dir blocker ty blk neu = locallyTC eInjectivityDepth succ $ do
               pwords "no head symbol found for" ++ [prettyTCM neu] ++ pwords ", so not inverting"
             fallback
           Just (ConsHead f') | f == f' -> do
+            -- no need to try commassoc synEq here because one side is blocked 
+            -- and the other is not, so they can never be equal.
             reportSDoc "tc.inj.use" 20 $ fsep $
               pwords "head symbol" ++ [prettyTCM f'] ++ pwords "can reduce to self, so not inverting"
             fallback
@@ -520,7 +522,7 @@ mostGeneralRule (rew : rest) notBest = do
       ps = rewPats rew
       gamma = rewContext rew
   (_ , t) <- fromMaybe __IMPOSSIBLE__ <$> getTypedHead (Def f [])
-  -- TODO: if f is commassoc, we need to try everywhere
+  -- TODO: for this to be correct, all commassoc rules need to exist mirrored
   res <- allM (rest ++ notBest) (\RewriteRule{rewPats = pats} -> do
       margs::[Elim' Term] <- mapM nlPatToTerm pats
       res <- nonLinMatch gamma (t, (\es -> Def f es)) ps margs

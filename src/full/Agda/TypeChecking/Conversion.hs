@@ -577,40 +577,44 @@ compareAtom cmp t m n =
               -- if comm/assoc we need to normalise the whole term
               commAssoc <- getCommAssocFor f
               if commAssoc then do
+                m <- listCommAssocArgs f =<< normalise m
+                n <- listCommAssocArgs f =<< normalise n
                 -- Both sides are in WHNF, so there can not be any interaction between arguments
                 -- Thus we are allowed to remove equal arguments
-                m <- normalise m
-                n <- normalise n
-                -- mArgs <- MultiSet.fromList <$> listCommAssocArgs f m
-                -- nArgs <- MultiSet.fromList <$> listCommAssocArgs f n
-                -- let mnArgs :: MultiSet Term
-                --     mnArgs = MultiSet.intersection mArgs nArgs
-                --     mArgs = MultiSet.difference mArgs mnArgs
-                --     nArgs = MultiSet.difference nArgs mnArgs
-                -- case (MultiSet.toList mArgs, MultiSet.toList nArgs) of
-                --   ([], []) -> return ()
-                --   (m, []) -> notEqual -- identify element is not possible, because then we could never have WHNF
-                --   ([], n) -> notEqual
-                --   -- ([m], [n]) -> compareAtom cmp t m n
-                --   -- ([MetaV x es], n) | size n > 0 -> assign dir x es =<< buildCommAssocTerm f n
-                --   -- (m, [MetaV x es]) | size m > 0 -> assign rid x es =<< buildCommAssocTerm f m
-                --   -- (m, n) | size m == 1 || size n == 1 -> do
-                --   --           m <- buildCommAssocTerm f m
-                --   --           n <- buildCommAssocTerm f n
-                --   --           compareAtom cmp t m n
-                --   (m, n) -> do
-                SynEq.checkSyntacticEquality m n (\_ _ -> return ()) $ \_ _ -> do
-                let blocker = unblockOnAnyMetaIn [m, n] 
                 reportSDoc "commassoc" 20 $ vcat 
-                    [ "sides not yet equal"
-                    , pretty m
-                    , pretty n
-                    , "blocker" <+> pretty blocker
-                    ]
-                if blocker == neverUnblock then
-                  notEqual
-                else
-                  patternViolation blocker
+                        [ "before remove equals"
+                        , pretty m
+                        , pretty n
+                        ]
+                (m, n) <- removeEqualArgs m n
+                reportSDoc "commassoc" 20 $ vcat 
+                        [ "removed equals"
+                        , pretty m
+                        , pretty n
+                        ]
+                case (m, n) of
+                  ([], []) -> return ()
+                  (m, []) -> notEqual -- identify element is not possible, because then we could never have WHNF
+                  ([], n) -> notEqual
+                  -- ([m], [n]) -> compareAtom cmp t m n
+                  -- ([MetaV x es], n) | size n > 0 -> assign dir x es =<< buildCommAssocTerm f n
+                  -- (m, [MetaV x es]) | size m > 0 -> assign rid x es =<< buildCommAssocTerm f m
+                  (m, n) | size m == 1 || size n == 1 -> do
+                            m <- buildCommAssocTerm f m
+                            n <- buildCommAssocTerm f n
+                            compareAtom cmp t m n
+                  (m, n) -> do
+                    let blocker = unblockOnAnyMetaIn [m, n] 
+                    reportSDoc "commassoc" 20 $ vcat 
+                        [ "sides not yet equal"
+                        , pretty m
+                        , pretty n
+                        , "blocker" <+> pretty blocker
+                        ]
+                    if blocker == neverUnblock then
+                      notEqual
+                    else
+                      patternViolation blocker
               else do
                 -- 3c. Oh no, we actually have to work and compare the eliminations!
                 a <- computeElimHeadType f es es'
@@ -634,6 +638,28 @@ compareAtom cmp t m n =
                   compareElims (repeat $ polFromCmp cmp) forcedArgs a' (Con x ci []) xArgs yArgs
           _ -> notEqual
     where
+        -- This function expects bost argument lists to be sorted
+        removeEqualArgs :: MonadConversion m => [Term] -> [Term] -> m ([Term], [Term])
+        removeEqualArgs (x : xs) (y : ys) = do
+          reportSDoc "commassoc" 30 $ vcat 
+                        [ "comparing!"
+                        , pretty x
+                        , pretty y
+                        ]
+          SynEq.checkSyntacticEquality x y
+            (\_ _ -> do
+              reportSDoc "commassoc" 30 $ "equal!"
+              removeEqualArgs xs ys) $ \_ _ -> do
+              reportSDoc "commassoc" 30 $ "not equal!"
+              if x < y then do
+                (xs, ys) <- removeEqualArgs xs (y : ys)
+                return (x : xs, ys)
+              else do
+                (xs, ys) <- removeEqualArgs (x : xs) ys
+                return (xs, y : ys)
+        removeEqualArgs [] ys = return ([], ys)
+        removeEqualArgs xs [] = return (xs, [])
+                
         -- returns True in case we handled the comparison already.
         compareEtaPrims :: MonadConversion m => QName -> Elims -> Elims -> m Bool
         compareEtaPrims q es es' = do
