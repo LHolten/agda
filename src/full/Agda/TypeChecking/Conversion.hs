@@ -583,14 +583,14 @@ compareAtom cmp t m n =
                 -- Thus we are allowed to remove equal arguments
                 reportSDoc "commassoc" 20 $ vcat 
                         [ "before remove equals"
-                        , pretty m
-                        , pretty n
+                        , prettyTCM m
+                        , prettyTCM n
                         ]
                 (m, n) <- removeEqualArgs m n
                 reportSDoc "commassoc" 20 $ vcat 
                         [ "removed equals"
-                        , pretty m
-                        , pretty n
+                        , prettyTCM m
+                        , prettyTCM n
                         ]
                 case (m, n) of
                   ([], []) -> return ()
@@ -607,9 +607,9 @@ compareAtom cmp t m n =
                     let blocker = unblockOnAnyMetaIn [m, n] 
                     reportSDoc "commassoc" 20 $ vcat 
                         [ "sides not yet equal"
-                        , pretty m
-                        , pretty n
-                        , "blocker" <+> pretty blocker
+                        , prettyTCM m
+                        , prettyTCM n
+                        , "blocker" <+> prettyTCM blocker
                         ]
                     if blocker == neverUnblock then
                       notEqual
@@ -643,8 +643,8 @@ compareAtom cmp t m n =
         removeEqualArgs (x : xs) (y : ys) = do
           reportSDoc "commassoc" 30 $ vcat 
                         [ "comparing!"
-                        , pretty x
-                        , pretty y
+                        , prettyTCM x
+                        , prettyTCM y
                         ]
           SynEq.checkSyntacticEquality x y
             (\_ _ -> do

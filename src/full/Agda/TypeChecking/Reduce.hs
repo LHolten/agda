@@ -665,7 +665,7 @@ normalisePlus v = reduce' v >>= \case
         "after reducing further" <+> prettyTCM args
       let term = List.sort args
       reportSDoc "commassoc" 30 $
-        "after sorting" <+> text (show term)
+        "after sorting" <+> prettyTCM term
       buildCommAssocTerm f $ term
     else slowNormaliseArgs v
   v -> slowNormaliseArgs v
@@ -685,8 +685,8 @@ buildCommAssocTerm :: (MonadReduce m) => QName -> [Term] -> m Term
 buildCommAssocTerm _ [] = __IMPOSSIBLE__
 buildCommAssocTerm _ [t] = return t
 buildCommAssocTerm plus (x : xs) = do 
-  lhs <- buildCommAssocTerm plus xs
-  return $ Def plus [Apply $ defaultArg lhs, Apply $ defaultArg x]
+  rhs <- buildCommAssocTerm plus xs
+  return $ Def plus [Apply $ defaultArg x, Apply $ defaultArg rhs]
 
 
 -- Andreas, 2013-03-20 recursive invokations of unfoldCorecursion
