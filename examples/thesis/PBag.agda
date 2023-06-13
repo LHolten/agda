@@ -7,28 +7,34 @@ open import Agda.Builtin.Nat
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
 open import Agda.Builtin.Bool
+open import Agda.Builtin.Sigma
 open import PlusComm1
 
 
 infixr 22 _⊕_
-abstract
-    _⊕_ : Nat → Nat → Nat
-    x ⊕ d = x + d
+_⊕_ : Nat → Nat → Nat
+zero ⊕ d = d
+suc x ⊕ d = suc (x ⊕ d)
 
 data Compare : Nat → Nat → Set where
     < : {d x : Nat} → Compare x (x ⊕ suc d)
     == : {x : Nat} → Compare x x
     > : {d x : Nat} → Compare (x ⊕ suc d) x
 
-abstract
-    cmp : (x y : Nat) → Compare x y
-    cmp zero zero = ==
-    cmp zero (suc y) = <
-    cmp (suc x) zero = >
-    cmp (suc x) (suc y) = case (cmp x y) of \where
-        == → ==
-        (<{d}) → <{d}
-        (>{d}) → >{d}
+cmp : (x y : Nat) → Compare x y
+cmp zero zero = ==
+cmp zero (suc y) = <
+cmp (suc x) zero = >
+cmp (suc x) (suc y) = case (cmp x y) of \where
+    == → ==
+    (<{d}) → <{d}
+    (>{d}) → >{d}
+
+-- postulate
+--     cmp> : ∀ x {d} → cmp (x ⊕ suc d) x ≡ > {d}
+--     cmp< : ∀ x {d} → cmp x (x ⊕ suc d) ≡ < {d}
+--     cmp== : ∀ x → cmp x x ≡ ==
+-- {-# REWRITE cmp> cmp< cmp== #-}
 
 infixl 20 _⊔_
 infixr 21 _↑_
@@ -90,17 +96,29 @@ postulate
 {-# COMMASSOC ⊔-comm #-}
 {-# COMMASSOC ∩-comm #-}
 
--- data WithEff : ∀ (b : Bag) {xs : UnSorted b} (O : Set) → Set₁ where
+_||_ : Bool → Bool → Bool
+false || x = x
+true || x = true
 
--- handle : ∀ {b x} {xs : UnSorted b} → WithEff (_) {x ∷ xs} Nat → Nat
--- handle = {!   !}
+postulate
+    x||true : ∀ x → x || true ≡ true
+{-# REWRITE x||true #-}
 
--- data Element : Bag → Set where
---     just : (x : Nat) → {xs : Bag} → Element (bag x ⊔ xs)
+postulate
+    _∈_ : Nat → Bag → Bool
+    ∈-dist : ∀ x xs ys → x ∈ (xs ⊔ ys) ≡ (x ∈ xs) || (x ∈ ys)
+    x∈Ø : ∀ x → x ∈ Ø ≡ false
+    x∈x↑[zero] : ∀ x → x ∈ x ↑ [zero] ≡ true
+    x⊕y∈x↑ys : ∀ x y ys → x ⊕ y ∈ x ↑ ys ≡ y ∈ ys
+    
+    y∉y↑suc-d↑ys : ∀ y d ys → y ∈ y ↑ suc d ↑ ys ≡ false
+    suc-d∉[zero] : ∀ d → suc d ∈ [zero] ≡ false
 
--- first : ∀ {x xs ys} → (bag x ⊔ xs ≡ ys) → UnSorted ys → Element ys
--- first {x} {xs} p [] = case (bag≡Ø {x} {xs}) p of λ {()}
--- first p (_∷_ x {xb} ys) = just x {xb}
+{-# REWRITE ∈-dist x∈Ø x∈x↑[zero] x⊕y∈x↑ys y∉y↑suc-d↑ys suc-d∉[zero] #-}
 
--- first' : ∀ {x xs} → UnSorted (bag x ⊔ xs) → Element (bag x ⊔ xs)
--- first' {x} {xs} list = first {x} {xs} refl list  
+fdsa : ∀ y d → y ∈ y ↑ suc d ↑ [zero] ≡ false
+fdsa y d = refl
+
+
+_∈'_ : Nat → Bag → Set
+x ∈' xs = x ∈ xs ≡ true

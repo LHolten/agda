@@ -1,6 +1,8 @@
 {-# OPTIONS --rewriting --no-fast-reduce -v commassoc:30 #-}
 open import Agda.Builtin.List
 open import Agda.Builtin.Nat
+open import Agda.Builtin.Bool
+open import Agda.Builtin.Unit
 open import PlusComm1
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
@@ -79,83 +81,54 @@ merge-sort xs = case (split xs) of \where
 infixr 5 _∷<_>_
 pattern _∷<_>_ x xb xs = _∷_ x {xb} xs
 
-case_to_of_ : ∀ {l₁ l₂} {A : Set l₁} → A → (B : Set l₂) → (A → B) → B
-case_to_of_ {l₁} {l₂} {A} c B r = case_of_ {l₁} {l₂} {A} {B} c r
+-- test4 : Sorted _
+-- test4 = 1 ∷ 3 ∷ 4 ∷ 4 ∷ []
 
--- data ⊥ : Set where
+-- test2 : (_ : Nat) → Sorted _
+-- test2 a = a ∷ suc a ∷ []
 
--- data NotNat (y : Nat) : Set where
---     just : (x : Nat) → (_ : x ≡ y → ⊥) → NotNat y
+-- data Cond (A : Set) : @0 Bool -> Set where
+--     return : {@0 v : Bool} → A → Cond A v
+--     nvm : Cond A false
 
+-- _>>=_ : ∀ {@0 v : Bool} {X O} → Cond X v → (X → Cond O v) → Cond O v
+-- return x >>= f = f x
+-- nvm >>= f = nvm
 
--- -- find the index of a Nat in an unsorted list
--- find : (x : Nat) {xb : Bag} → UnSorted (bag x ⊔ xb) → Nat
--- find x {xb} xs = where-x x (λ _ → Nat)
---     (λ ys → zero)
---     (λ y ys res → suc res)
---     {xb} xs
-
--- -- pos : Nat
--- -- pos = find 3 {bag 0 ⊔ bag 2} (2 ∷ 0 ∷ 3 ∷ [])
-
-data CmpEq (x y : Nat) : Set where
-    == : x ≡ y → CmpEq x y
-    != : (x ≡ y → ⊥) → CmpEq x y
-
-cmp-eq : (x y : Nat) → CmpEq x y
-cmp-eq zero zero = == refl
-cmp-eq zero (suc y) = != λ ()
-cmp-eq (suc x) zero = != λ ()
-cmp-eq (suc x) (suc y) = case (cmp-eq x y) of \where
-    (== refl) → == refl
-    (!= p) → != \where
-        refl → p refl
-
-data Index (x : Nat) : {@0 b : Bag} → UnSorted b → Set where
-    here : {@0 b : Bag} {ys : UnSorted b} → Index x (x ∷ ys)
-    there : ∀ {y} {@0 b : Bag} {xs : UnSorted b} → Index x xs → Index x (y ∷ xs)
-
-find : (x : Nat) {xb : Bag} → (xs : UnSorted (bag x ⊔ xb)) → Index x xs 
-find x {xb} ys = find' x {xb} ys refl
-    where
-    find' : (x : Nat) {@0 xb yb : Bag} → (xs : UnSorted yb) → (yb ≡ bag x ⊔ xb) → Index x xs 
-    find' x {xb} [] p = bag≡Ø {x} {xb} p
-    find' x {xb} (y ∷< yb > ys) q = case (cmp-eq x y) of \where
-        (== refl) → here
-        (!= p) → there (find' x {xb ∩ yb} ys (⊔-step {xb} p q))
-
-record List1 : Set where
-    inductive
-    constructor _∷_
-    field
-        head : Nat
-        tail : Maybe List1
-open List1
-
-data IdkList : Maybe List1 → Set where
-    ?∷_ : ∀ {xs} → IdkList (tail xs) → IdkList (just xs)
-    _∷_ : ∀ x {xs} → IdkList xs → IdkList (just (x ∷ xs))
-    * : ∀ {xs} → IdkList xs
-
-data Index1 (x : Nat) : Maybe List1 → Set where
-    ?∷_ : ∀ {xs} → Index1 x (tail xs) → Index1 x (just xs)
-    x∷* : ∀ {xs} → head xs ≡ x → Index1 x (just xs)
+-- _>>_ : ∀ {@0 v : Bool} {O} -> Cond ⊤ v → Cond O v → Cond O v
+-- left >> right = left >>= λ tt → right
 
 
-_++_ : ∀ {xs} → IdkList xs → IdkList xs → IdkList xs
-xs ++ * = xs
-* ++ ys = ys
-(x ∷ xs) ++ (?∷ ys) = x ∷ (xs ++ ys)
-(?∷ xs) ++ (y ∷ ys) = y ∷ (xs ++ ys)
-(?∷ xs) ++ (?∷ ys) = ?∷ (xs ++ ys)
-(z ∷ xs) ++ (z ∷ ys) = z ∷ (xs ++ ys)
+data Index (x : Nat) : {@0 xb : Bag} → UnSorted xb → Set where
+    here : {@0 xb : Bag} {xs : UnSorted xb} → Index x (x ∷ xs)
+    there : ∀ {y} {@0 xb : Bag} {xs : UnSorted xb} → Index x xs → Index x (y ∷ xs)
 
--- -- test : Sorted _
--- -- test = 1 ∷ 3 ∷ 4 ∷ 4 ∷ []
+idx : ∀ x {@0 xb : Bag} → (xs : UnSorted xb) → {{p : x ∈' xb}} → Index x xs
+idx y (x ∷ xs) = case (cmp x y) of \where
+    < → there (idx y xs)
+    == → here
+    > → there (idx y xs)
 
--- -- test2 : (_ : Nat) → Sorted _
--- -- test2 a = a ∷ [ suc a ]
+idx2 : ∀ x {@0 xb : Bag} → (xs : UnSorted (xb ⊔ bag x)) -> Index x xs
+idx2 x xs = idx x xs
 
+data IndexS : (x : Nat) {@0 xb : Bag} → Sorted xb → Set where
+    here : {x : Nat} {@0 xb : Bag} {xs : Sorted (x ↑ xb)} → IndexS x (x ∷ xs)
+    there : ∀ {y d} {@0 xb : Bag} {xs : Sorted (y ↑ xb)} → IndexS (y ⊕ d) xs → IndexS (y ⊕ d) (y ∷ xs)
+
+idxS : ∀ x {@0 xb : Bag} → (xs : Sorted xb) → {{p : x ∈' xb}} → IndexS x xs
+idxS y (x ∷ xs) = case (cmp x y) of \where
+    < → there (idxS y xs)
+    == → here
+
+idx-list : ∀ x (xs : List Nat) → {{p : x ∈' from-list xs}} -> Nat
+idx-list y (x ∷ xs) = case (cmp x y) of \where
+    < → suc (idx-list y xs)
+    == → zero
+    > → suc (idx-list y xs)
+
+test : idx-list 2 (3 ∷ 2 ∷ 4 ∷ []) ≡ 1
+test = refl
 
 
 -- -- test3 : (a : Nat) → Singleton (suc a)
