@@ -556,11 +556,24 @@ slowReduceTerm v = do
       MetaV x es -> iapp es
       Def f es   -> do
         commAssoc <- getCommAssocFor f
-        if commAssoc then do
+        if commAssoc && (length es >= 2) then do
+          -- let (head, tail) = splitAt 2 es
           args <- listArgs f (Def f es)
           args <- insertAll f args []
           res <- buildCommAssocTerm f (ignoreBlocking args)
-          if (getBlocker args) == neverUnblock then
+          -- res <- case res of
+          --       Def f es -> if (length es > 2) then
+          --           flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f (es ++ tail)
+          --         else return $ notBlocked $ Def f (es ++ tail)
+          --       _ -> __IMPOSSIBLE__
+          -- let blocker1 = getBlocker args
+          --     blocker2 = getBlocker res
+          --     blocker = unblockOnEither blocker1 blocker2
+          -- if blocker == neverUnblock then
+          --   return $ notBlocked (ignoreBlocking res)
+          -- else 
+          --   return $ blockedOn blocker (ignoreBlocking res)
+          if getBlocker args == neverUnblock then
             return $ notBlocked res
           else 
             return $ blockedOn (getBlocker args) res
@@ -654,23 +667,29 @@ normalisePlus :: Term -> ReduceM Term
 normalisePlus v = reduce' v >>= \case
   v@(Def f es) -> do
     commAssoc <- getCommAssocFor f
-    if commAssoc then do
-      args <- listCommAssocArgs f v
+    if commAssoc && (length es >= 2) then do
+      let (head, tail) = splitAt 2 es
+      args <- listCommAssocArgs f (Def f head)
       -- each arg has been reduced, but we need to normalize the args of each arg
       reportSDoc "commassoc" 30 $
         "before reducing further" <+> prettyTCM args
       args <- mapM slowNormaliseArgs args
+      tail <- normalise' tail
+
       args <- instantiateFull args
       reportSDoc "commassoc" 30 $
         "after reducing further" <+> prettyTCM args
       let term = List.sort args
       reportSDoc "commassoc" 30 $
         "after sorting" <+> prettyTCM term
-      buildCommAssocTerm f $ term
+      term <- buildCommAssocTerm f term
+      return $ case term of
+        Def f es -> Def f (es ++ tail)
+        _ -> __IMPOSSIBLE__
     else slowNormaliseArgs v
   v -> slowNormaliseArgs v
 
-listCommAssocArgs :: (MonadReduce m) => QName -> Term -> m [Term]
+listCommAssocArgs :: (MonadDebug m, MonadReduce m) => QName -> Term -> m [Term]
 listCommAssocArgs plus v = case v of
   Def f es | f == plus -> do
     case allApplyElims es of
@@ -678,7 +697,10 @@ listCommAssocArgs plus v = case v of
         list1 <- listCommAssocArgs plus (unArg a)
         list2 <- listCommAssocArgs plus (unArg b)
         return $ concat [list1, list2]
-      _ -> __IMPOSSIBLE__
+      vals -> do
+        reportSDoc "commassoc" 30 $
+          "unexpected number of args" <+> pretty vals
+        __IMPOSSIBLE__
   v -> return [v]
 
 buildCommAssocTerm :: (MonadReduce m) => QName -> [Term] -> m Term

@@ -576,7 +576,8 @@ compareAtom cmp t m n =
 
               -- if comm/assoc we need to normalise the whole term
               commAssoc <- getCommAssocFor f
-              if commAssoc then do
+              if commAssoc && (length es >= 2) && (length es' >= 2) then do
+                -- TODO: support overapplication of our AC functions
                 m <- listCommAssocArgs f =<< normalise m
                 n <- listCommAssocArgs f =<< normalise n
                 -- Both sides are in WHNF, so there can not be any interaction between arguments
