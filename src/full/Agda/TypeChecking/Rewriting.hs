@@ -167,8 +167,8 @@ addRewriteRules qs = do
     reportSDoc "rewriting" 10 $
       "done checking confluence of rules" <+> prettyList_ (map (prettyTCM . rewName) rews)
 
-addCommAssoc :: QName -> TCM ()
-addCommAssoc q = do
+addCommAssoc :: QName -> QName -> TCM ()
+addCommAssoc q p = do
   def <- instantiateDef =<< getConstInfo q
   TelV gamma1 core <- telView $ defType def
   reportSDoc "commassoc" 10 $

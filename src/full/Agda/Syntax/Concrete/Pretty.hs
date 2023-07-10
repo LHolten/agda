@@ -594,8 +594,8 @@ instance Pretty Pragma where
     pretty (BuiltinPragma _ b x)   = hsep [ "BUILTIN", text (rangedThing b), pretty x ]
     pretty (RewritePragma _ _ xs)    =
       hsep [ "REWRITE", hsep $ map pretty xs ]
-    pretty (CommAssocPragma _ x) = 
-      hsep [ "COMMASSOC", pretty x ]
+    pretty (CommAssocPragma _ x y) = 
+      hsep [ "COMMASSOC", pretty x, pretty y ]
     pretty (CompilePragma _ b x e) =
       hsep [ "COMPILE", text (rangedThing b), pretty x, text e ]
     pretty (ForeignPragma _ b s) =
