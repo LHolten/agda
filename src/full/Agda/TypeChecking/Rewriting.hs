@@ -168,45 +168,40 @@ addRewriteRules qs = do
       "done checking confluence of rules" <+> prettyList_ (map (prettyTCM . rewName) rews)
 
 addCommAssoc :: QName -> QName -> TCM ()
-addCommAssoc q p = do
-  def <- instantiateDef =<< getConstInfo q
-  TelV gamma1 core <- telView $ defType def
-  reportSDoc "commassoc" 10 $
-    "adding commassoc rule" <+> prettyTCM q
-  reportSDoc "commassoc" 20 $
-    "gamma is" <+> prettyTCM gamma1 <+> "core is" <+> prettyTCM core
-  case unEl core of
-    Def rel es@(_:_:_) -> do
-      reportSDoc "commassoc" 20 $
-        "rel is" <+> prettyTCM rel <+> "es is" <+> prettyTCM es
-      -- Because of the type of rel (Γ → sort), all es are applications.
-      let vs = map unArg $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
-      -- The last two arguments are lhs and rhs.
-          n  = size vs
-          (us, [lhs, rhs]) = splitAt (n - 2) vs
-          aa = Apply $ defaultArg $ Var 1 []
-          bb = Apply $ defaultArg $ Var 0 []
-      -- lets check that it is commutativity
-      ff <- case lhs of
-        Def f (a:b:[]) | a == aa && b == bb -> return f
-        _ -> typeError . GenericDocError =<< hsep
-          [ "expected"
-          , prettyTCM lhs
-          , "to be on these variables"
-          , prettyTCM aa, "and", prettyTCM bb
-          ]
-      case rhs of
-        Def f (b:a:[]) | a == aa && b == bb && f == ff -> return ()
-        _ -> typeError . GenericDocError =<< hsep
-          [ "This is not commutativity"
-          , prettyTCM lhs
-          , "<=>"
-          , prettyTCM rhs
-          ]
+addCommAssoc comm assoc = do
+  comm <- checkRewriteRule comm
+  assoc <- checkRewriteRule assoc
 
-      modifySignature $ addCommAssocFor ff
-    _ -> __IMPOSSIBLE__
+  let noEqualHeads = typeError $ GenericError $
+        "The commutativity and associativity proofs are not for the same function"
+      commRuleWrong = typeError $ GenericError $
+        "The commutativity rule is wrong"
+      assocRuleWrong = typeError $ GenericError $
+        "The associativity rule is wrong"
+  unless (rewHead comm == rewHead assoc) noEqualHeads
+  let f = rewHead comm
+      app x = Apply $ defaultArg x
+      var x = app $ Var x []
+  t <- defType <$> getConstInfo f
   
+  -- check commutativity
+  rhs <- runReduceM $ rewriteWith t (Def f) comm [var 0, var 1]
+  case rhs of
+    Right rhs | rhs == Def f [var 1, var 0] -> return ()
+    _ -> commRuleWrong
+  
+  -- check associativity
+  rhs <- runReduceM $ rewriteWith t (Def f) assoc [var 0, app $ Def f [var 1, var 2]]
+  case rhs of
+    Right rhs | rhs == Def f [app $ Def f [var 0, var 1], var 2] -> return ()
+    _ -> do
+      -- try the other direction
+      rhs <- runReduceM $ rewriteWith t (Def f) assoc [app $ Def f [var 0, var 1], var 2]
+      case rhs of
+        Right rhs | rhs == Def f [var 0, app $ Def f [var 1, var 2]] -> return ()
+        _ -> assocRuleWrong
+
+  modifySignature $ addCommAssocFor f
 
 -- Auxiliary function for checkRewriteRule.
 -- | Get domain of rewrite relation.
@@ -465,7 +460,7 @@ checkRewriteRule q = do
             , nest 2 $ text "Parameters: " <+> prettyList (map prettyTCM vs)
             ]
 
--- | @rewriteWith t f es rew@ where @f : t@
+-- | @rewriteWith t f rew es@ where @f : t@
 --   tries to rewrite @f es@ with @rew@, returning the reduct if successful.
 rewriteWith :: Type
             -> (Elims -> Term)

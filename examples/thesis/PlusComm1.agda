@@ -31,7 +31,7 @@ case x of f = f x
 +assoc zero y z = refl
 +assoc (suc x) y z = cong suc (+assoc x y z)
 
-{-# COMMASSOC +comm #-}
+{-# COMMASSOC +comm +assoc #-}
 
 data Singleton : Nat → Set where
     just : (n : Nat) → Singleton n
@@ -101,9 +101,13 @@ min-comm zero n = refl
 min-comm (suc m) zero = refl
 min-comm (suc m) (suc n) rewrite min-comm m n = refl
 
--- -- TODO: prove associative
+min-assoc : (m n o : Nat) → m ⊓ (n ⊓ o) ≡ (m ⊓ n) ⊓ o
+min-assoc zero n o = refl
+min-assoc m zero o = refl
+min-assoc m n zero = refl
+min-assoc (suc m) (suc n) (suc o) rewrite min-assoc m n o = refl
 
-{-# COMMASSOC min-comm #-}
+{-# COMMASSOC min-comm min-assoc #-}
 
 min-test : (m n o : Nat) → suc m ⊓ n ⊓ suc o ≡ n ⊓ suc (m ⊓ o)
 min-test m n o = refl
